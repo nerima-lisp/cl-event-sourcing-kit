@@ -91,6 +91,25 @@ structured `event-store-operation` value. An adapter owns its transaction
 boundary, locking, retry behavior, serialization, recovery, and durability;
 the core does not infer any of those properties from the adapter class.
 
+### Persistent adapter checklist
+
+A persistent adapter should document and test the following decisions in its
+own system:
+
+1. How opaque payloads and metadata are serialized and restored.
+2. Which transaction or atomic-write mechanism protects the complete append
+   batch and its event-ID uniqueness constraint.
+3. How stream versions, duplicate event IDs, and global positions are
+   allocated under concurrent writers.
+4. Whether recovery, replication, retention, and durability are guaranteed by
+   the backend or only best-effort adapter behavior.
+5. Whether global-feed reads and checkpoints are supported, and what ordering
+   guarantee they provide.
+
+These choices belong in `cl-event-sourcing-postgresql-kit`,
+`cl-event-sourcing-redis-kit`, or another adapter repository rather than in
+this core.
+
 ## Append semantics
 
 ### Expected versions
@@ -278,3 +297,14 @@ stream reads and writes, all expected-version cases, conflicts, duplicate ID
 semantics, ordering, pure replay, staging, projection rebuild and failure
 checkpoints, opaque values, the adapter protocol, the in-memory reference
 store, and a public-API-only quick start.
+
+## Repository layout
+
+- `src/`: core envelope, protocol, replay, staging, projection, and in-memory
+  implementation files.
+- `t/`: contract-oriented tests, including adapter and public-API tests.
+- `run-tests.lisp`: portable ASDF test bootstrap using `cl-host-kit`.
+- `run-coverage.lisp`: strict coverage bootstrap and gate.
+- `cl-event-sourcing-kit.asd`: core, optional systems, and test system
+  definitions.
+- `flake.nix`: reproducible development shell and Nix checks.
