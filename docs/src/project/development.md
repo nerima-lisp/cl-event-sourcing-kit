@@ -38,8 +38,26 @@ Coverage output is selected by `CL_EVENT_SOURCING_KIT_COVERAGE_DIR`, or a
 temporary directory when that variable is absent.
 
 The strict report targets executable operation and recovery modules. ASDF model,
-condition, package, and macro declaration files are loaded and verified by the
-tests, but are not treated as runtime expression-coverage targets.
+package, and macro declaration files are loaded and verified by the tests, but
+are not treated as runtime expression-coverage targets. Condition definitions
+carry executable `:report` functions and remain in the coverage set; the
+declarative exclusion list in `t/package.lisp` is the authoritative source for
+which files are excluded.
+
+## Run the benchmarks
+
+`bench/performance.lisp` is a reproducible, self-checking probe over the
+in-memory event store and outbox. It is not part of `nix flake check`; run it
+directly:
+
+```sh
+nix develop -c sbcl --script bench/performance.lisp
+```
+
+`CL_EVENT_SOURCING_KIT_BENCH_COUNT` controls the append workload (default
+5000). Each measured operation asserts its observed result count and item
+ordering before reporting throughput, so a benchmark failure indicates a
+correctness regression, not only a performance change.
 
 ## Build the documentation
 

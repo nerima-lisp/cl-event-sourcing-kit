@@ -72,7 +72,7 @@ nix build .#docs
 ```
 
 See the [development guide](docs/src/project/development.md) for test,
-coverage, and documentation commands.
+coverage, benchmark, and documentation commands.
 
 ## Repository layout
 
