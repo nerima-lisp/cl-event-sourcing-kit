@@ -41,3 +41,43 @@
                                            requested-event)
   (declare (ignore store))
   (%domain-event-equivalent-p existing-event requested-event))
+
+(defmethod event-store-append-batch ((store event-store) requests)
+  (declare (ignore requests))
+  (%signal-unsupported-event-store-operation store :append-batch))
+
+(defmethod event-store-save-snapshot ((store event-store) snapshot)
+  (declare (ignore snapshot))
+  (%signal-unsupported-event-store-operation store :save-snapshot))
+
+(defmethod event-store-read-snapshot ((store event-store)
+                                      stream-id
+                                      &key
+                                      version)
+  (declare (ignore stream-id version))
+  (%signal-unsupported-event-store-operation store :read-snapshot))
+
+(defmethod event-store-delete-snapshot ((store event-store) stream-id)
+  (declare (ignore stream-id))
+  (%signal-unsupported-event-store-operation store :delete-snapshot))
+
+(defmethod event-store-snapshots-supported-p ((store event-store))
+  (declare (ignore store))
+  nil)
+
+(defmethod event-store-prune ((store event-store)
+                              &key before-global-position)
+  (declare (ignore before-global-position))
+  (%signal-unsupported-event-store-operation store :prune))
+
+(defmethod event-store-retention-supported-p ((store event-store))
+  (declare (ignore store))
+  nil)
+
+(defmethod event-store-retention-floor ((store event-store))
+  (declare (ignore store))
+  0)
+
+(defmethod event-store-capabilities ((store t))
+  (declare (ignore store))
+  nil)

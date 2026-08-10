@@ -10,7 +10,7 @@ stream version and its uncommitted list is cleared."
   (let ((expected-version
          (if (eq expected-version *unspecified*) :no-stream
            expected-version)))
-    (unless stream-id
+    (unless (and (not (eq stream-id *unspecified*)) stream-id)
       (%invalid-domain-event nil :stream-id "A staging stream id is required."))
     (%validate-expected-version expected-version)
     (make-instance
@@ -23,7 +23,7 @@ stream version and its uncommitted list is cleared."
 (defun %ensure-staged-event (staging event)
   (unless (domain-event-p event)
     (%invalid-domain-event event :event-type))
-  (unless (equal
+  (unless (%safe-equal-p
            (event-staging-stream-id staging)
            (domain-event-stream-id event))
     (%invalid-domain-event

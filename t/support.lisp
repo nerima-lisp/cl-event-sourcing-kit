@@ -6,6 +6,7 @@
                         &key
                         (type :test-event)
                         (timestamp 100)
+                        (schema-version 1)
                         metadata
                         correlation-id
                         causation-id
@@ -28,6 +29,8 @@
      metadata
      :timestamp
      timestamp
+     :schema-version
+     schema-version
      :correlation-id
      correlation-id
      :causation-id

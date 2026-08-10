@@ -17,9 +17,18 @@ caller-owned and event payloads remain opaque."
                ,@body))
            cases))))
     `(defun ,name (,state-var ,event-var)
-       (case (domain-event-type ,event-var)
-         ,@(nreverse cases)
-         (otherwise
+       (cond
+         ,@(mapcar (lambda (case)
+                     `((or
+                       ,@(mapcar
+                          (lambda (key)
+                            `(equal (domain-event-type ,event-var) ',key))
+                          (if (listp (first case))
+                              (first case)
+                            (list (first case)))))
+                       ,(second case)))
+                   (nreverse cases))
+         (t
           ,(if otherwise-body `(progn
                                  ,@otherwise-body)
              `(error

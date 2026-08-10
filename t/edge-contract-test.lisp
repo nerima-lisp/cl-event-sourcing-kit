@@ -102,6 +102,7 @@
     (expect (domain-event-timestamp event) :to-be-truthy)
     (expect (domain-event-aggregate-id event) :to-be "default-stream")
     (expect (domain-event-payload event) :to-be nil)
+    (expect (domain-event-schema-version event) :to-be 1)
     (expect (domain-event-metadata event) :to-be nil)
     (expect (domain-event-version event) :to-be nil)
     (expect (domain-event-global-position event) :to-be nil)
@@ -113,6 +114,21 @@
   (signals
    invalid-domain-event
    (make-domain-event :type :event :stream-id "stream-1" :version :invalid))
+  (signals
+   invalid-domain-event
+   (make-domain-event :type :event :stream-id "stream-1" :schema-version nil))
+  (signals
+   invalid-domain-event
+   (make-domain-event :type :event :stream-id "stream-1" :schema-version -1))
+  (signals
+   invalid-domain-event
+   (make-domain-event
+    :type
+    :event
+    :stream-id
+    "stream-1"
+    :schema-version
+    :invalid))
   (signals
    invalid-domain-event
    (make-domain-event
@@ -152,15 +168,46 @@
     :clock
     (make-hash-table))))
  (it
+  "prints circular condition values safely"
+  (let ((cycle (list :cycle)))
+    (setf (cdr cycle) cycle)
+    (let ((report
+            (with-output-to-string (stream)
+              (format
+               stream
+               "~A"
+               (make-condition
+                'invalid-expected-version
+                :value
+                cycle)))))
+      (expect (search "#1=" report) :to-be-truthy))))
+ (it
   "keeps the reference store atomic at input boundaries"
   (let ((store (make-in-memory-event-store)))
     (expect (in-memory-event-store-p store) :to-be-truthy)
     (expect (in-memory-event-store-p nil) :to-be nil)
     (expect (event-store-current-global-position store) :to-be 0)
+    (expect
+     (event-store-read-all store :limit 1)
+     :to-be
+     nil)
     (signals type-error (make-in-memory-event-store :global-position-start -1))
     (signals
      type-error
      (make-in-memory-event-store :global-position-start :invalid))
+    (signals
+     type-error
+     (make-in-memory-event-store :global-position-floor :invalid))
+    (signals
+     type-error
+     (make-in-memory-event-store :global-position-floor -1))
+    (signals
+     type-error
+     (make-in-memory-event-store
+      :global-position-start
+      0
+      :global-position-floor
+      1))
     (signals type-error (make-in-memory-event-store :lock nil))
     (signals invalid-domain-event (event-store-append store nil nil))
     (signals
@@ -188,9 +235,9 @@
         store
         "stream-1"
         (list (make-test-event "mismatch" "other-stream" :payload))))
-      (signals
-       invalid-domain-event
-       (event-store-append store "stream-1" (list :not-an-event)))
+    (signals
+     invalid-domain-event
+     (event-store-append store "stream-1" (list :not-an-event)))
       (signals
        invalid-domain-event
        (event-store-append
@@ -261,6 +308,21 @@
     (signals
      event-store-operation-not-supported
      (event-store-stream-exists-p store "adapter-stream"))
+    (signals
+     event-store-operation-not-supported
+     (event-store-append-batch store nil))
+    (signals
+     event-store-operation-not-supported
+     (event-store-save-snapshot
+      store
+      (make-event-snapshot :stream-id "adapter-stream" :version 0)))
+    (signals
+     event-store-operation-not-supported
+     (event-store-read-snapshot store "adapter-stream"))
+    (signals
+     event-store-operation-not-supported
+     (event-store-delete-snapshot store "adapter-stream"))
+    (expect (event-store-snapshots-supported-p store) :to-be nil)
     (expect (event-store-global-position-supported-p store) :to-be nil)
     (expect (event-store-event-equivalent-p store event event) :to-be-truthy)
     (expect
@@ -282,6 +344,7 @@
                                    (payload :eq-payload)
                                    (metadata :eq-metadata)
                                    (timestamp 1)
+                                   (schema-version 1)
                                    (correlation-id "eq-correlation")
                                    (causation-id "eq-causation"))
              (make-domain-event
@@ -299,6 +362,8 @@
               metadata
               :timestamp
               timestamp
+              :schema-version
+              schema-version
               :correlation-id
               correlation-id
               :causation-id
@@ -313,6 +378,7 @@
                (make-equivalent-event :payload :other-payload)
                (make-equivalent-event :metadata :other-metadata)
                (make-equivalent-event :timestamp 2)
+               (make-equivalent-event :schema-version 2)
                (make-equivalent-event :correlation-id "other-correlation")
                (make-equivalent-event :causation-id "other-causation"))))
         (expect (event-store-event-equivalent-p store base base) :to-be-truthy)
@@ -320,7 +386,21 @@
           (expect
            (event-store-event-equivalent-p store base variant)
            :to-be
-           nil))))))
+           nil))
+        (expect
+         (event-store-event-equivalent-p
+          store
+          (make-equivalent-event :payload (cons :same :left))
+         (make-equivalent-event :payload (cons :same :right)))
+         :to-be
+         nil)
+        (expect
+         (event-store-event-equivalent-p
+          store
+          (make-equivalent-event :payload (cons :left :same))
+          (make-equivalent-event :payload (cons :right :same)))
+         :to-be
+         nil)))))
  (it
   "keeps replay and staging input contracts explicit"
   (let ((event (make-test-event "replay-1" "replay-stream" 1))
@@ -341,6 +421,9 @@
      invalid-domain-event
      (replay-events 0 (list :not-an-event) #'identity))
     (signals invalid-domain-event (make-event-staging nil))
+    (signals
+     invalid-domain-event
+     (make-event-staging cl-event-sourcing-kit::*unspecified*))
     (signals
      invalid-expected-version
      (make-event-staging "replay-stream" :expected-version -1))))

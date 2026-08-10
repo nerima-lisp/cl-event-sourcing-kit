@@ -12,75 +12,73 @@
     (if completed-p (apply on-success result)
       (funcall on-error result))))
 
-(defun event-store-append/cc (store
-                              stream-id
-                              events
-                              on-success
-                              &key
-                              (on-error #'error)
-                              (expected-version *unspecified*))
+(define-cps-operation event-store-append/cc
+    (store
+     stream-id
+     events
+     on-success
+     &key
+     (on-error #'error)
+     (expected-version *unspecified*))
   "Synchronously append and invoke ON-SUCCESS or ON-ERROR.
 
 This is a continuation-shaped API, not an asynchronous or scheduler-backed
-guarantee.  Adapters can use the same shape to introduce asynchronous
-transport at a later boundary without changing the core operation names."
+guarantee.  A transport boundary can use the same shape to introduce
+asynchronous execution without changing the core operation names."
   (let ((expected-version
          (if (eq expected-version *unspecified*) :any
            expected-version)))
-    (%call-continuation
-     (lambda ()
-       (event-store-append
-        store
-        stream-id
-        events
-        :expected-version
-        expected-version))
+    (event-store-append
+     store
+     stream-id
+     events
+     :expected-version
+     expected-version)))
+
+(define-cps-operation event-store-append-batch/cc
+    (store
+     requests
      on-success
-     on-error)))
+     &key
+     (on-error #'error))
+  "Synchronously append a batch through success/error continuations."
+  (event-store-append-batch store requests))
 
-(defun event-store-read/cc (store
-                            stream-id
-                            on-success
-                            &key
-                            (on-error #'error)
-                            from-version
-                            to-version)
+(define-cps-operation event-store-read/cc
+    (store
+     stream-id
+     on-success
+     &key
+     (on-error #'error)
+     from-version
+     to-version)
   "Synchronously read a stream through success/error continuations."
-  (%call-continuation
-   (lambda ()
-     (event-store-read
-      store
-      stream-id
-      :from-version
-      from-version
-      :to-version
-      to-version))
-   on-success
-   on-error))
+  (event-store-read
+   store
+   stream-id
+   :from-version
+   from-version
+   :to-version
+   to-version))
 
-(defun replay-events/cc (initial-state
-                         events
-                         reducer
-                         on-success
-                         &key
-                         (on-error #'error))
+(define-cps-operation replay-events/cc
+    (initial-state
+     events
+     reducer
+     on-success
+     &key
+     upcaster
+     (on-error #'error))
   "Synchronously replay through success/error continuations."
-  (%call-continuation
-   (lambda ()
-     (replay-events initial-state events reducer))
-   on-success
-   on-error))
+  (replay-events initial-state events reducer :upcaster upcaster))
 
-(defun commit-events/cc (staging
-                         store
-                         on-success
-                         &key
-                         (on-error #'error)
-                         (expected-version *unspecified*))
+(define-cps-operation commit-events/cc
+    (staging
+     store
+     on-success
+     &key
+     (on-error #'error)
+     (expected-version *unspecified*))
   "Synchronously commit staging through success/error continuations."
-  (%call-continuation
-   (lambda ()
-     (if (eq expected-version *unspecified*) (commit-events staging store)
-       (commit-events staging store :expected-version expected-version)))
-   on-success
-   on-error))
+  (if (eq expected-version *unspecified*) (commit-events staging store)
+    (commit-events staging store :expected-version expected-version)))
