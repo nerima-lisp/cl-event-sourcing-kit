@@ -1,19 +1,18 @@
 # cl-event-sourcing-kit
 
 `cl-event-sourcing-kit` is a domain-independent Common Lisp event-sourcing
-protocol. It provides the consistency boundary around an event stream without
-choosing a database, serialization format, business model, or messaging
-system. The optional `cl-event-sourcing-kit/in-memory` system supplies the
-reference store used by the examples and tests.
+protocol. It defines an opaque event envelope, optimistic stream appends,
+pure replay, staging, structured conditions, and synchronous continuation
+entry points without choosing a database, serialization format, or domain
+model.
 
-The event payload and metadata are opaque Lisp values. The core does not know
-whether they contain a plist, a structure, a JSON-compatible tree, a byte
-vector, or an application-defined object.
+[Documentation](https://nerima-lisp.github.io/cl-event-sourcing-kit/) ·
+[Documentation source](docs/src/index.md) ·
+[Capability matrix](docs/src/project/capability-matrix.md)
 
 ## Quick start
 
-The core system is storage-independent. Load the optional in-memory system for
-a small, public-API-only example:
+Load the optional in-memory system for a small public-API-only example:
 
 ```lisp
 (asdf:load-system "cl-event-sourcing-kit/in-memory")
@@ -24,237 +23,39 @@ a small, public-API-only example:
                :type :value-added
                :stream-id "quick-stream"
                :payload 42
-               :metadata '(:source :example)
                :timestamp 1)))
-  (multiple-value-bind (committed-events version)
+  (multiple-value-bind (events version)
       (cl-event-sourcing-kit:event-store-append
        store "quick-stream" (list event) :expected-version :no-stream)
     (list version
           (cl-event-sourcing-kit:replay-events
-           0 committed-events
+           0 events
            (lambda (state current-event)
              (+ state
                 (cl-event-sourcing-kit:domain-event-payload current-event)))))))
 ```
 
-The result is `(1 42)`. An application can replace the in-memory store with
-an adapter implementing the same protocol without changing its aggregate
-replay function.
+The result is `(1 42)`. Replace the in-memory store with an adapter that
+implements the same event-store protocol when persistence is required.
 
-## Domain event envelope
+## Systems
 
-`make-domain-event` creates a read-only envelope with these generic fields:
+- `cl-event-sourcing-kit`: storage-independent core protocol, envelope,
+  replay, staging, conditions, and CPS entry points.
+- `cl-event-sourcing-kit/in-memory`: reference in-memory event store.
+- `cl-event-sourcing-kit/projection`: projection and rebuild support.
+- `cl-event-sourcing-kit/durable`: safe serialization, recoverable file
+  storage, subscriptions, outbox delivery, durable projection checkpoints,
+  upcasters, retention, and operational wrappers.
 
-- `id`: the event identity used for idempotency.
-- `type`: an application-defined, non-`NIL` event type.
-- `stream-id`: the stream identity used for optimistic concurrency.
-- `aggregate-id`: an optional alias for `stream-id`; the two values must not
-  disagree.
-- `payload`: opaque application data.
-- `metadata`: opaque contextual data.
-- `timestamp`: an opaque timestamp value.
-- `version`: the stream sequence assigned by a store, or `NIL` before commit.
-- `correlation-id` and `causation-id`: optional extension points for tracing
-  and causal relationships.
-- `global-position`: an optional store-wide position, or `NIL` when the
-  adapter does not provide one.
+The durable system is a portable reference runtime, not a distributed
+database, broker, scheduler, or high-availability deployment. Future database
+adapters and separate CQRS, Saga, audit-log, and messaging systems remain
+outside this repository's core.
 
-Event IDs and timestamps are injectable. Supply `:id` and `:timestamp` for
-explicit values, or use `:id-source` and `:clock` for per-event collaborators.
-Those collaborators may be functions or boundary-kit source objects. Tests
-can also rebind `*default-event-id-source*` and `*default-event-clock*`. The
-core does not require UUIDs or a particular clock representation.
+## Development
 
-Envelope slots are not writable through the public API. Payload and metadata
-remain opaque references, however: the core does not deep-copy or freeze
-application values. Applications that need value immutability should supply
-immutable values or copy them at their own boundary.
-
-## Event store protocol
-
-The protocol is expressed as CLOS generic functions on `event-store`.
-Persistent implementations should subclass `event-store` directly and
-implement the operations needed by their storage model:
-
-- `event-store-append`
-- `event-store-read`
-- `event-store-read-all` when global positions are available
-- `event-store-current-version`
-- `event-store-current-global-position` when global positions are available
-- `event-store-stream-exists-p`
-- `event-store-global-position-supported-p`
-- `event-store-event-equivalent-p` when duplicate comparison needs adapter
-  policy
-
-The base methods signal `event-store-operation-not-supported` with a
-structured `event-store-operation` value. An adapter owns its transaction
-boundary, locking, retry behavior, serialization, recovery, and durability;
-the core does not infer any of those properties from the adapter class.
-
-### Persistent adapter checklist
-
-A persistent adapter should document and test the following decisions in its
-own system:
-
-1. How opaque payloads and metadata are serialized and restored.
-2. Which transaction or atomic-write mechanism protects the complete append
-   batch and its event-ID uniqueness constraint.
-3. How stream versions, duplicate event IDs, and global positions are
-   allocated under concurrent writers.
-4. Whether recovery, replication, retention, and durability are guaranteed by
-   the backend or only best-effort adapter behavior.
-5. Whether global-feed reads and checkpoints are supported, and what ordering
-   guarantee they provide.
-
-These choices belong in `cl-event-sourcing-postgresql-kit`,
-`cl-event-sourcing-redis-kit`, or another adapter repository rather than in
-this core.
-
-## Append semantics
-
-### Expected versions
-
-Stream versions start at `1`. A stream that has never had a successful append
-has current version `0` and `event-store-stream-exists-p` returns `NIL`. An
-empty append does not create a stream.
-
-| `:expected-version` | Missing stream | Existing stream |
-| --- | --- | --- |
-| `:any` | succeeds | succeeds at any current version |
-| `:no-stream` | succeeds | signals `event-version-conflict` |
-| non-negative integer `N` | succeeds only when `N` is `0` | succeeds only when current version is `N` |
-
-An integer mismatch signals `event-version-conflict`, which exposes the
-stream ID, expected version, and actual version. Invalid expected-version
-values signal `invalid-expected-version`.
-
-### Atomicity and ordering
-
-An append batch is validated before the in-memory store mutates any stream,
-event index, or global feed. A failed expected-version check, invalid event,
-duplicate conflict, or assigned-position error leaves the batch unapplied.
-Adapters must provide the same all-or-nothing protocol boundary using their
-native transaction mechanism; the core cannot make a non-transactional
-adapter durable or atomic by itself.
-
-Events retain input order in a stream. A successful append returns two values:
-the committed event envelopes and the new stream version. The returned
-envelopes are new envelopes carrying their assigned stream versions. The
-in-memory implementation also assigns monotonically increasing global
-positions in append order across streams.
-
-`event-store-read` returns stream events in append order and supports inclusive
-`from-version` and `to-version` bounds. Global positions are optional. The
-in-memory store supports them; an adapter that does not can report `NIL` from
-`event-store-global-position-supported-p` and signal an unsupported operation
-for global-feed reads.
-
-### Event ID idempotency
-
-Event IDs are unique across the in-memory store, not only within one stream.
-The following behavior is intentional:
-
-1. Re-appending an equivalent event ID is idempotent. The store returns the
-   canonical committed event and does not advance the stream version.
-2. Equivalence compares the envelope's event fields and ignores store-assigned
-   `version` and `global-position`. Adapters may specialize
-   `event-store-event-equivalent-p`.
-3. Reusing an event ID for a different envelope signals
-   `duplicate-event-id-conflict`.
-4. Repeating an ID inside one request, or combining an idempotent duplicate
-   with new events in one request, signals `duplicate-event-id`.
-
-The duplicate-only retry is safe to repeat even when the retry's expected
-version is stale, because the store has already recorded that event ID. A
-request that contains new events still performs the normal expected-version
-check.
-
-## Replay and staging
-
-`replay-events` is a pure left-to-right fold. It does not sort, serialize,
-persist, or mutate the event list, so an aggregate can be represented by any
-state value and reducer function:
-
-```lisp
-(cl-event-sourcing-kit:replay-events
- initial-state events
- (lambda (state event)
-   (reduce-state state
-                 (cl-event-sourcing-kit:domain-event-payload event))))
-```
-
-`make-event-staging`, `stage-event`, `uncommitted-events`, and `commit-events`
-provide a small mutable session for one stream. Staged events are uncommitted
-and therefore have no version or global position. A successful commit clears
-the staging list and advances its expected version. A conflict or other
-append failure leaves the staged events available for inspection or retry.
-
-## Projection and rebuild
-
-The optional `cl-event-sourcing-kit/projection` system provides
-`make-projection` and `rebuild-projection`. A projection handler receives the
-current state and one event and returns the next state. Rebuild starts from an
-initial state and consumes the adapter's global feed after a checkpoint.
-
-The checkpoint advances only after a handler returns successfully. If a
-handler signals an error, `projection-failure` exposes the projection, failed
-event, global position, original cause, and last successful checkpoint. The
-state and checkpoint are updated independently only after a successful handler
-return. The core does not roll back side effects performed by a handler on a
-mutable object; immutable state or application-owned transactional projection
-storage is recommended.
-
-The core deliberately does not provide a projection daemon, scheduler,
-background worker, retry loop, or checkpoint database. Those belong to an
-application or a separate operational system.
-
-## What this is, and what it is not
-
-- **Event sourcing** stores the events as the source of aggregate state and
-  reconstructs state by replay. This library defines that stream protocol and
-  a reference store.
-- **CQRS** separates command/write models from query/read models. A projection
-  can be used by a CQRS application, but CQRS routing and read-model policy
-  are outside this core.
-- **Saga** coordinates a long-running business workflow and compensating
-  actions. Correlation and causation IDs are extension points only; this
-  library does not implement orchestration or compensation.
-- **Audit log** records a history for review or compliance. An audit log may
-  use an event store, but audit retention, redaction, authorization, and
-  presentation are separate concerns.
-- **Outbox pattern** atomically records a message alongside a local business
-  transaction and publishes it later. This event store is not an outbox and
-  does not publish messages.
-
-Keeping these boundaries explicit prevents a database adapter or event
-envelope from silently becoming a message broker, workflow engine, or query
-model framework.
-
-## Systems and future adapters
-
-- `cl-event-sourcing-kit`: the storage-independent core protocol, pure replay,
-  staging, structured conditions, and synchronous continuation entry points.
-- `cl-event-sourcing-kit/in-memory`: the named in-memory implementation system
-  for applications that want to express that dependency explicitly.
-- `cl-event-sourcing-kit/projection`: optional projection/rebuild support.
-- `cl-host-kit`: host portability for the test and coverage bootstrap; it is
-  not part of the core event-store protocol.
-- Future `cl-event-sourcing-postgresql-kit`: PostgreSQL storage, transactions,
-  serialization, and durability policy.
-- Future `cl-event-sourcing-redis-kit`: Redis storage and its availability/
-  durability trade-offs.
-- Future separate CQRS, Saga, audit-log, and outbox integration systems:
-  `cl-event-sourcing-cqrs-kit`, `cl-event-sourcing-saga-kit`,
-  `cl-audit-log-kit`, and `cl-event-sourcing-outbox-kit` are intentionally
-  outside this repository's core.
-
-Neither PostgreSQL, Redis, filesystem storage, `cl-postgresql-kit`, nor
-`cl-redis-kit` is a dependency of this system. No JSON, MessagePack, or S-expression
-serialization is selected by the core.
-
-## Testing
-
-Run the ASDF test operation from the repository checkout:
+Run the tests from a configured Common Lisp environment:
 
 ```sh
 env CL_SOURCE_REGISTRY="$PWD//" sbcl --non-interactive \
@@ -262,49 +63,25 @@ env CL_SOURCE_REGISTRY="$PWD//" sbcl --non-interactive \
   --eval '(asdf:test-system "cl-event-sourcing-kit")'
 ```
 
-The repository wrapper runs the same test entry point and is suitable for CI:
+The reproducible Nix commands are:
 
 ```sh
-env CL_SOURCE_REGISTRY="$PWD//" sbcl --script run-tests.lisp
+nix develop
+nix flake check
+nix build .#docs
 ```
 
-The flake provides the same reproducible environment:
-
-```sh
-nix develop -c sbcl --non-interactive \
-  --eval '(require :asdf)' \
-  --eval '(asdf:test-system "cl-event-sourcing-kit")'
-```
-
-Run the strict expression/branch coverage gate with:
-
-```sh
-env CL_SOURCE_REGISTRY="$PWD//" sbcl --non-interactive \
-  --load run-coverage.lisp
-```
-
-The flake exposes the same checks as `nix flake check`. Build the regular
-coverage report with `nix build .#coverage`; the strict expression/branch gate
-is the `coverage-strict` check included in `nix flake check`.
-
-The coverage runner fails when the instrumented core operations do not reach
-100% expression and branch coverage. Coverage output is written to the
-directory selected by `CL_EVENT_SOURCING_KIT_COVERAGE_DIR`, or a temporary
-directory when that variable is absent.
-
-The test system covers envelope construction and injected collaborators,
-stream reads and writes, all expected-version cases, conflicts, duplicate ID
-semantics, ordering, pure replay, staging, projection rebuild and failure
-checkpoints, opaque values, the adapter protocol, the in-memory reference
-store, and a public-API-only quick start.
+See the [development guide](docs/src/project/development.md) for test,
+coverage, and documentation commands.
 
 ## Repository layout
 
-- `src/`: core envelope, protocol, replay, staging, projection, and in-memory
-  implementation files.
-- `t/`: contract-oriented tests, including adapter and public-API tests.
-- `run-tests.lisp`: portable ASDF test bootstrap using `cl-host-kit`.
-- `run-coverage.lisp`: strict coverage bootstrap and gate.
-- `cl-event-sourcing-kit.asd`: core, optional systems, and test system
-  definitions.
-- `flake.nix`: reproducible development shell and Nix checks.
+- `docs/`: MkDocs Material site configuration and source pages.
+- `src/`: core, projection, in-memory, and durable implementation files.
+- `t/`: contract-oriented and public API tests.
+- `cl-event-sourcing-kit.asd`: system definitions and dependencies.
+- `flake.nix`: reproducible development shell, packages, and checks.
+
+## License
+
+MIT. See the license declaration in `cl-event-sourcing-kit.asd`.
