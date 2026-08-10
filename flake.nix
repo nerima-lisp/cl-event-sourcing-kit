@@ -18,7 +18,7 @@
     };
 
     paredit-cli = {
-      url = "github:nerima-lisp/paredit-cli/v1.3.0";
+      url = "github:nerima-lisp/paredit-cli/v1.6.0";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
@@ -115,6 +115,8 @@
         cl-weave.packages.${ctx.system}.cl-weave
       ];
 
+      docs.root = ./docs;
+
       timeoutSeconds = 120;
       treefmt.evalModule = treefmt-nix.lib.evalModule;
 
@@ -131,6 +133,7 @@
               "cl-event-sourcing-kit"
               "cl-event-sourcing-kit/in-memory"
               "cl-event-sourcing-kit/projection"
+              "cl-event-sourcing-kit/durable"
             ];
             timeoutSeconds = 120;
             killAfterSeconds = 30;
