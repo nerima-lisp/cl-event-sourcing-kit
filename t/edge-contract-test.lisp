@@ -5,7 +5,7 @@
          (stream-id "contract-stream")
          (first-event (make-test-event "contract-1" stream-id :first))
          (second-event (make-test-event "contract-2" stream-id :second)))
-    (expect (typep store 'event-store) :to-be-truthy)
+    (expect (event-store-capabilities store) :to-be-truthy)
     (multiple-value-bind (committed version) (event-store-append
                                               store
                                               stream-id
@@ -68,7 +68,7 @@
 (defmacro define-event-store-contract (description constructor)
   `(it ,description (exercise-event-store-contract ,constructor)))
 
-(defclass malformed-global-position-store (event-store)
+(defclass malformed-global-position-store ()
   ())
 
 (defmethod event-store-global-position-supported-p ((store
@@ -94,7 +94,7 @@
     (make-in-memory-event-store :global-position-start 10))))
 
 (describe
- "boundary and adapter contracts"
+ "boundary and store contracts"
  (it
   "generates events with defaults and rejects broken injected sources"
   (let ((event (make-domain-event :type :defaulted :stream-id "default-stream")))
@@ -289,25 +289,25 @@
      :to-be
      nil)))
  (it
-  "exposes every unsupported adapter operation as a structured condition"
+  "exposes every unsupported store operation as a structured condition"
   (let* ((store (make-instance 'unsupported-store))
-         (event (make-test-event "adapter-1" "adapter-stream" :payload)))
+         (event (make-test-event "store-1" "store-stream" :payload)))
     (signals
      event-store-operation-not-supported
-     (event-store-append store "adapter-stream" nil))
+     (event-store-append store "store-stream" nil))
     (signals
      event-store-operation-not-supported
-     (event-store-read store "adapter-stream"))
+     (event-store-read store "store-stream"))
     (signals event-store-operation-not-supported (event-store-read-all store))
     (signals
      event-store-operation-not-supported
-     (event-store-current-version store "adapter-stream"))
+     (event-store-current-version store "store-stream"))
     (signals
      event-store-operation-not-supported
      (event-store-current-global-position store))
     (signals
      event-store-operation-not-supported
-     (event-store-stream-exists-p store "adapter-stream"))
+     (event-store-stream-exists-p store "store-stream"))
     (signals
      event-store-operation-not-supported
      (event-store-append-batch store nil))
@@ -315,13 +315,13 @@
      event-store-operation-not-supported
      (event-store-save-snapshot
       store
-      (make-event-snapshot :stream-id "adapter-stream" :version 0)))
+      (make-event-snapshot :stream-id "store-stream" :version 0)))
     (signals
      event-store-operation-not-supported
-     (event-store-read-snapshot store "adapter-stream"))
+     (event-store-read-snapshot store "store-stream"))
     (signals
      event-store-operation-not-supported
-     (event-store-delete-snapshot store "adapter-stream"))
+     (event-store-delete-snapshot store "store-stream"))
     (expect (event-store-snapshots-supported-p store) :to-be nil)
     (expect (event-store-global-position-supported-p store) :to-be nil)
     (expect (event-store-event-equivalent-p store event event) :to-be-truthy)

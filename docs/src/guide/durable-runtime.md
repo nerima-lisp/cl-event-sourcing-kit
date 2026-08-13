@@ -26,7 +26,7 @@ Offset, outbox, and checkpoint files use temporary-file replacement. Their
 `:sync` hooks default to `finish-output`: this flushes the Lisp stream but is
 not an operating-system `fsync` guarantee. The file lock registry is
 process-local, so multi-process or distributed deployment requires a backend
-adapter with shared locking and transactions.
+backend with shared locking and transactions.
 
 ## Subscriptions
 
@@ -45,7 +45,7 @@ The outbox API provides message records, pending reads, leases, claim tokens,
 acknowledgement, retry, requeue, and dead-letter state. File-backed messages
 are persisted with replacement writes. `event-store-append-with-outbox`
 expresses the event-plus-message boundary; the reference combined store
-supports it in memory, while a production adapter should implement both
+supports it in memory, while a production backend should implement both
 writes in its own database transaction.
 
 The file outbox reader requires every field in the current delivery-state
@@ -65,11 +65,11 @@ synchronous run and persists the result after successful handling.
 The upcaster registry supports exact schema-version transitions. The observed
 store and retry helpers provide operational hooks without changing event-store
 semantics. Retention APIs expose capability and floor information; pruning
-policy remains an adapter and application decision.
+policy remains an backend and application decision.
 
 ## Explicit limits
 
 The reference runtime does not provide replication, encryption,
 authorization, metrics export, distributed scheduling, background
 supervision, or operating-system `fsync` guarantees. Treat those as explicit
-adapter or application responsibilities.
+backend or application responsibilities.

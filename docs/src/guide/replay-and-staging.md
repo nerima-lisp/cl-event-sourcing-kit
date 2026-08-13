@@ -21,12 +21,12 @@ the event sequence.
 `upcast-event` and `upcast-events` are the schema-evolution boundary. An
 upcaster receives a stored `domain-event` and returns a domain event in the
 shape expected by the current reducer. The upcaster can be a registry, a
-chain, or an adapter-specific function; the core does not select a wire
+chain, or an backend-specific function; the core does not select a wire
 format.
 
 `load-aggregate` accepts the same `:upcaster` policy and validates the event
 stream before reducing it. Pass `:use-snapshot NIL` when a caller needs a full
-replay even if the adapter supports snapshots. It returns the reconstructed
+replay even if the backend supports snapshots. It returns the reconstructed
 state and the last stream version, with `0` for an empty stream.
 
 ## Staging a command

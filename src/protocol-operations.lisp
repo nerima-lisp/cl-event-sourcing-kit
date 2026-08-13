@@ -31,7 +31,7 @@ without allowing a duplicate-id retry to hang on a cyclic cons tree."
 
 Signal EVENT-STORE-OPERATION-NOT-SUPPORTED with all missing capabilities as
 the operation payload.  Failing before a write or a delivery loop starts is
-important for portable applications: an adapter must not silently downgrade
+important for portable applications: a store implementation must not silently downgrade
 an operation whose correctness depends on durability, fencing, or atomicity."
   (unless (%proper-list-p capabilities)
     (error 'type-error :datum capabilities :expected-type 'list))

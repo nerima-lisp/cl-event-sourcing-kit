@@ -5,7 +5,7 @@
   :long-description "The core defines an opaque event envelope, optimistic append/read protocol,
 pure replay, staging, structured conditions, and synchronous CPS entry points.
 Persistence, serialization, durability, scheduling, and domain policy belong to
-adapters or optional systems."
+the concrete store and optional systems."
   :author "nerima-lisp"
   :maintainer "nerima-lisp"
   :homepage "https://github.com/nerima-lisp/cl-event-sourcing-kit"
@@ -14,7 +14,7 @@ adapters or optional systems."
                    "https://github.com/nerima-lisp/cl-event-sourcing-kit.git")
   :license "MIT"
   :version "1.0.0"
-  :depends-on ("cl-boundary-kit")
+  :depends-on ("cl-boundary-kit" "cl-weave")
   :pathname "src"
   :serial t
   :around-compile (lambda (next)
@@ -49,6 +49,7 @@ adapters or optional systems."
                       (funcall next)))
   :components ((:file "in-memory-model")
                (:file "in-memory-operations")
+               (:file "in-memory-snapshots")
                (:file "in-memory-queries")))
 
 (asdf:defsystem "cl-event-sourcing-kit/projection"
@@ -84,6 +85,7 @@ durable projection checkpoints, upcaster registry, and operational wrappers."
                (:file "durable-macros")
                (:file "durable-serialization")
                (:file "durable-file-store")
+               (:file "durable-file-operations")
                (:file "durable-subscription-lease")
                (:file "durable-subscription")
                (:file "durable-outbox-storage")

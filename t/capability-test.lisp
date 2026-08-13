@@ -28,8 +28,8 @@
              (event-store-capabilities store)
              :test #'eq))))
  (it
-  "provides neutral capability defaults for an abstract store"
-  (let ((store (make-instance 'event-store)))
+  "provides neutral capability defaults for an store"
+  (let ((store (make-instance 'unsupported-store)))
     (expect (event-store-capabilities store) :to-be nil)
     (expect (event-store-supports-p store :append) :to-be nil)))
  (it
@@ -71,7 +71,7 @@
   (signals type-error
     (event-store-supports-p (make-event-store) 1)))
  (it
-  "requires an adapter to advertise every requested capability"
+  "requires a store to advertise every requested capability"
   (let ((store (make-event-store)))
     (expect (event-store-require-capabilities
              store

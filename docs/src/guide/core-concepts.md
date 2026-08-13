@@ -34,7 +34,7 @@ Default collaborators are available through `*default-event-id-source*` and
 representation.
 
 This keeps tests deterministic and leaves identity policy with the
-application. A persistent adapter must still enforce the uniqueness and
+application. A persistent backend must still enforce the uniqueness and
 equivalence policy described in [Event store](event-store.md).
 
 ## Stream versions
@@ -46,7 +46,7 @@ are added by a successful append.
 
 ## Responsibility boundary
 
-The core guarantees protocol-level validation and result shapes. An adapter or
+The core guarantees protocol-level validation and result shapes. An backend or
 application owns:
 
 - transaction and locking behavior;

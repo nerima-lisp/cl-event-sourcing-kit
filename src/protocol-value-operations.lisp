@@ -41,7 +41,7 @@ The STATE is caller-owned and is not serialized or deep-copied by the core."
                                   (expected-version *unspecified*))
   "Create one request for EVENT-STORE-APPEND-BATCH.
 
-The adapter performs event-envelope and stream-order validation when the
+The backend performs event-envelope and stream-order validation when the
 request is committed."
   (let ((effective-expected-version
           (if (eq expected-version *unspecified*)
@@ -66,7 +66,7 @@ request is committed."
   "Transform EVENT into the schema understood by the caller.
 
 UPCASTER is NIL or a function receiving one DOMAIN-EVENT and returning a new
-DOMAIN-EVENT.  A registry, chained upcaster, or adapter-specific policy can
+DOMAIN-EVENT.  A registry, chained upcaster, or backend-specific policy can
 be supplied as that function without coupling the core to a serialization
 format."
   (unless (domain-event-p event)

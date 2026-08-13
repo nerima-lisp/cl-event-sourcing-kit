@@ -65,8 +65,8 @@ binary payload types should provide an application codec explicitly."
                             dead-lettered-at)
   "Create an application-level message for an outbox.
 
-The ID is the idempotency key used by an outbox adapter.  Payload and
-metadata remain opaque and are serialized by the selected adapter."
+The ID is the idempotency key used by an outbox backend.  Payload and
+metadata remain opaque and are serialized by the selected backend."
   (unless status-supplied-p
     (setf status :pending))
   (unless attempts-supplied-p
@@ -134,9 +134,9 @@ metadata remain opaque and are serialized by the selected adapter."
   "Wrap STORE with lifecycle callbacks.
 
 BEFORE receives the operation keyword before execution, AFTER receives it
-after success, and ON-ERROR receives the operation keyword and condition."
-  (unless (typep store 'event-store)
-    (error 'type-error :datum store :expected-type 'event-store))
+  after success, and ON-ERROR receives the operation keyword and condition."
+  (unless (event-store-capabilities store)
+    (error 'type-error :datum store :expected-type 'event-store-capability-provider))
   (dolist (callback (list before after on-error))
     (when (and callback (not (functionp callback)))
       (error 'type-error :datum callback :expected-type 'function)))

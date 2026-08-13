@@ -187,8 +187,6 @@
                                         lock)
   (unless (projection-p projection)
     (error 'type-error :datum projection :expected-type 'projection))
-  (unless (typep event-store 'event-store)
-    (error 'type-error :datum event-store :expected-type 'event-store))
   (unless (projection-checkpoint-store-p checkpoint-store)
     (error 'type-error
            :datum checkpoint-store

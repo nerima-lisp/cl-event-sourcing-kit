@@ -50,7 +50,7 @@
        (make-in-memory-event-outbox-store :lock 1))
      (signals event-store-operation-not-supported
        (event-store-append-with-outbox
-        (make-instance 'event-store)
+        (make-instance 'unsupported-store)
         "unsupported"
         nil
         nil))

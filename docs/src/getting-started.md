@@ -11,7 +11,7 @@ need:
 ```
 
 The in-memory system is useful for examples, tests, and applications that
-want a small reference adapter. It does not change the core API.
+want a small reference backend. It does not change the core API.
 
 ## Append and replay
 
@@ -38,7 +38,7 @@ want a small reference adapter. It does not change the core API.
                  current-event)))))))
 ```
 
-The result is `(1 42)`. The reducer is independent of the storage adapter, so
+The result is `(1 42)`. The reducer is independent of the storage backend, so
 the same aggregate code can be used with a different implementation of
 `event-store`.
 
@@ -66,14 +66,14 @@ the reproducible shell; the commands are collected in
 
 ## First design decisions
 
-Before writing an adapter, decide:
+Before writing a backend, decide:
 
 1. What transaction or atomic-write mechanism protects an append batch.
 2. How opaque payloads and metadata are serialized.
 3. How event IDs are made unique and how equivalent retries are recognized.
 4. Whether global positions, snapshots, retention, and recovery are
    supported.
-5. Which guarantees are supplied by the backend and which are only adapter
+5. Which guarantees are supplied by the backend and which are only deployment
    policy.
 
 The core protocol deliberately does not infer these properties from a class

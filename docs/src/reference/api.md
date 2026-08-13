@@ -1,7 +1,7 @@
 # API reference
 
 The public API is grouped by ASDF system. The complete export list is kept in
-`src/package.lisp`; the groups below are the stable concepts an adapter or
+`src/package.lisp`; the groups below are the stable concepts a backend or
 application should depend on.
 
 ## Core system
@@ -20,7 +20,7 @@ stream, operation, or checkpoint values for programmatic handling.
 
 ### Store protocol
 
-`event-store` and these generic operations define the adapter boundary:
+These generic operations define the backend protocol directly:
 
 ```text
 event-store-append
@@ -58,7 +58,7 @@ session.
 stream and global-feed reads, optimistic expected versions, all-or-nothing
 append batches, duplicate-ID idempotency, snapshots, and global positions.
 
-Use the in-memory system to test adapter-independent application behavior; do
+Use the in-memory system to test backend-independent application behavior; do
 not infer production durability from it.
 
 ## Projection system

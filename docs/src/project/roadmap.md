@@ -10,10 +10,10 @@ This page records direction and boundaries, not release dates.
 - synchronous replay, staging, and projections;
 - local durable reference components with explicit limitations.
 
-## Candidate adapter work
+## Candidate backend work
 
 Separate repositories may provide PostgreSQL, Redis, or other backend
-adapters. Such projects would own their transaction, locking, serialization,
+backends. Such projects would own their transaction, locking, serialization,
 replication, retention, and operational guarantees while implementing this
 protocol.
 
@@ -25,4 +25,4 @@ protocol. They are intentionally not folded into the core system.
 New infrastructure should enter the core only when it is a protocol concern
 that remains independent of a backend and deployment model. A feature that
 needs a scheduler, broker, distributed lock, or application policy belongs in
-an optional system or a separate adapter.
+an optional system or a separate backend.

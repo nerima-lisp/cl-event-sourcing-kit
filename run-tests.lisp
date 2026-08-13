@@ -6,8 +6,6 @@
 
 (require :asdf)
 
-(asdf:load-system "cl-host-kit")
-
 (defun script-directory ()
   (make-pathname :name nil
                  :type nil
@@ -23,5 +21,10 @@
 
 (let ((root (script-directory)))
   (configure-local-source-registry root)
+  (format t "~&[cl-event-sourcing-kit] loading cl-host-kit...~%")
+  (finish-output)
+  (asdf:load-system "cl-host-kit")
+  (format t "~&[cl-event-sourcing-kit] loading test system from ~A...~%" root)
+  (finish-output)
   (asdf:test-system "cl-event-sourcing-kit")
-  (host-kit:quit 0))
+  (funcall (symbol-function (find-symbol "QUIT" "HOST-KIT")) 0))

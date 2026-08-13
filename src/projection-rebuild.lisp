@@ -147,7 +147,7 @@ on externally mutable objects."
 
 The state and checkpoint are preserved across calls, making this operation a
 restartable synchronous catch-up boundary.  A live subscription, scheduler,
-or durable checkpoint repository belongs to the adapter or application layer."
+or durable checkpoint repository belongs to the concrete store or application layer."
   (check-type projection projection)
   (%validate-projection-limit limit)
   (unless (event-store-global-position-supported-p store)

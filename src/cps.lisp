@@ -3,14 +3,19 @@
     (error 'type-error :datum on-success :expected-type 'function))
   (unless (functionp on-error)
     (error 'type-error :datum on-error :expected-type 'function))
-  (multiple-value-bind (completed-p result) (handler-case (values
-                                                           t
-                                                           (multiple-value-list
-                                                            (funcall thunk)))
-                                              (error (condition)
-                                                (values nil condition)))
-    (if completed-p (apply on-success result)
-      (funcall on-error result))))
+  (let ((outcome
+          (cl-weave:with-continuation-values (values finish)
+            (handler-case
+                (multiple-value-call
+                    (lambda (&rest next-values)
+                      (apply #'finish :success next-values))
+                  (funcall thunk))
+              (error (condition)
+                (funcall #'finish :error condition)))
+            values)))
+    (case (first outcome)
+      (:success (apply on-success (rest outcome)))
+      (:error (funcall on-error (second outcome))))))
 
 (define-cps-operation event-store-append/cc
     (store

@@ -1,7 +1,7 @@
 # Event store
 
-The event store protocol is expressed as CLOS generic functions on
-`event-store`. The smallest useful adapter implements append, stream reads,
+The event store protocol is expressed as CLOS generic functions. The smallest
+useful backend implements append, stream reads,
 version inspection, stream existence, and the capability methods relevant to
 its storage model.
 
@@ -34,7 +34,7 @@ feed and is meaningful only when
 is used for snapshots and retention.
 
 The base methods signal `event-store-operation-not-supported` with a
-structured operation value. An adapter should advertise unsupported
+structured operation value. Each backend should advertise unsupported
 capabilities rather than silently returning a weaker result.
 
 ## Atomic batches
@@ -56,7 +56,7 @@ Event IDs are unique across the store. The reference in-memory semantics are:
 1. Re-appending an equivalent ID returns the canonical committed event without
    advancing the stream version.
 2. Equivalence compares the envelope fields while ignoring store-assigned
-   `version` and `global-position`. An adapter may specialize
+   `version` and `global-position`. An backend may specialize
    `event-store-event-equivalent-p`.
 3. Reusing an ID for a different envelope signals
    `duplicate-event-id-conflict`.
@@ -82,11 +82,11 @@ snapshot history.
 `load-aggregate` uses the newest available snapshot by default, then replays
 only events after that version. It validates snapshot and event versions and
 requires the loaded stream to be contiguous. Snapshot state, metadata,
-serialization, and consistency with the event log remain adapter concerns.
+serialization, and consistency with the event log remain backend concerns.
 
-## Adapter checklist
+## Backend checklist
 
-Document these choices in every persistent adapter:
+Document these choices in every persistent backend:
 
 - transaction or atomic-write mechanism for append batches;
 - serialization format and treatment of opaque values;
@@ -95,5 +95,5 @@ Document these choices in every persistent adapter:
 - global-feed ordering and checkpoint behavior;
 - snapshot consistency and pruning policy.
 
-These decisions belong in an adapter repository such as a future PostgreSQL or
-Redis integration, not in the storage-independent core.
+These decisions belong in the backend implementation, not in the
+storage-independent core.

@@ -9,7 +9,7 @@ application aggregate / command
               |
        event-store protocol
         /       |       \
-   in-memory  file     future database adapter
+   in-memory  file     future database backend
         |       |       \
        snapshots, global feed, retention
               |
@@ -23,15 +23,16 @@ stream ordering rules, result values, structured conditions, pure replay,
 staging, and synchronous CPS entry points. Payloads, metadata, and aggregate
 state remain opaque.
 
-## Adapter layer
+## Backend layer
 
-An adapter subclasses `event-store` and supplies the storage-specific methods.
-It decides how transactions, locking, serialization, recovery, durability,
-global positions, snapshots, and retention work. Capability methods make those
-choices visible to callers.
+Each backend implements the store-operation protocol directly. The protocol is
+defined by generic operations and explicit capability values; there is no
+base-store class or compatibility layer. A backend decides how
+transactions, locking, serialization, recovery, durability, global positions,
+snapshots, and retention work.
 
-The in-memory adapter is the executable reference for protocol semantics. The
-file adapter composes it with a journal and safe serialization to demonstrate a
+The in-memory backend is the executable reference for protocol semantics. The
+file backend composes a journal with safe serialization to demonstrate a
 restartable local runtime.
 
 ## Application layer

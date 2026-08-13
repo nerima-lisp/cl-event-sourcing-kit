@@ -109,6 +109,7 @@
         cl-boundary-kit.packages.${ctx.system}.cl-boundary-kit
         cl-concurrent-kit.packages.${ctx.system}.cl-concurrent-kit
         cl-host-kit.packages.${ctx.system}.cl-host-kit
+        cl-weave.packages.${ctx.system}.cl-weave
       ];
 
       lispCheckDependencies = ctx: [

@@ -23,6 +23,28 @@
 
 (describe
  "macro and continuation interfaces"
+ (it
+  "rejects CPS definitions without both continuation bindings"
+  (signals error
+    (macroexpand-1
+     '(define-cps-operation missing-success (value on-error)
+        (declare (ignore value on-error)))))
+  (signals error
+    (macroexpand-1
+     '(define-cps-operation missing-error (value on-success)
+        (declare (ignore value on-success))))))
+ (it
+  "validates both direct continuation functions and routes thunk failures"
+  (signals type-error
+    (cl-event-sourcing-kit::%call-continuation (lambda () :ok) nil #'identity))
+  (signals type-error
+    (cl-event-sourcing-kit::%call-continuation (lambda () :ok) #'identity nil))
+  (let ((caught nil))
+    (cl-event-sourcing-kit::%call-continuation
+     (lambda () (error "continuation failure"))
+     #'identity
+     (lambda (condition) (setf caught condition)))
+    (expect (typep caught 'error) :to-be-truthy)))
 (it-each
  ((:increment 3 3)
   (:decrement 3 -3)

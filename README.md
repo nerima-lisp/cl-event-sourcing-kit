@@ -35,8 +35,9 @@ Load the optional in-memory system for a small public-API-only example:
                 (cl-event-sourcing-kit:domain-event-payload current-event)))))))
 ```
 
-The result is `(1 42)`. Replace the in-memory store with an adapter that
-implements the same event-store protocol when persistence is required.
+The result is `(1 42)`. A persistent backend implements the same generic
+operations directly; no compatibility adapter or base-store subclass is
+required.
 
 ## Systems
 
@@ -50,7 +51,7 @@ implements the same event-store protocol when persistence is required.
 
 The durable system is a portable reference runtime, not a distributed
 database, broker, scheduler, or high-availability deployment. Future database
-adapters and separate CQRS, Saga, audit-log, and messaging systems remain
+store implementations and separate CQRS, Saga, audit-log, and messaging systems remain
 outside this repository's core.
 
 ## Development

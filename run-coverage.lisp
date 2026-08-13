@@ -8,8 +8,6 @@
 ;;;; fasls and make the coverage result vacuous.
 (require :asdf)
 
-(asdf:load-system "cl-host-kit")
-
 (require :sb-cover)
 
 (defun test-source-paths ()
@@ -164,7 +162,12 @@
                        :defaults (truename script))))
   (asdf:initialize-source-registry
    `(:source-registry (:directory ,root) :inherit-configuration))
+  (asdf:load-system "cl-host-kit")
   (declaim (optimize sb-cover:store-coverage-data))
-  (host-kit:quit
-   (host-kit:call-with-temporary-directory
-    #'run-coverage-in-directory)))
+  (let ((call-with-temporary-directory
+          (symbol-function
+           (find-symbol "CALL-WITH-TEMPORARY-DIRECTORY" "HOST-KIT")))
+        (quit (symbol-function (find-symbol "QUIT" "HOST-KIT"))))
+    (funcall quit
+             (funcall call-with-temporary-directory
+                      #'run-coverage-in-directory))))

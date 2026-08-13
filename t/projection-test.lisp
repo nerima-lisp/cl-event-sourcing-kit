@@ -1,6 +1,6 @@
 (in-package #:cl-event-sourcing-kit/test)
 
-(defclass projection-read-failure-store (event-store)
+(defclass projection-read-failure-store ()
   ())
 
 (defmethod event-store-global-position-supported-p
@@ -13,7 +13,7 @@
   (declare (ignore store after-global-position limit))
   (error "synthetic projection read failure"))
 
-(defclass malformed-projection-event-store (event-store)
+(defclass malformed-projection-event-store ()
   ())
 
 (defmethod event-store-global-position-supported-p
@@ -26,7 +26,7 @@
   (declare (ignore store after-global-position limit))
   (list :not-an-event))
 
-(defclass nonmonotonic-global-position-store (event-store)
+(defclass nonmonotonic-global-position-store ()
   ())
 
 (defmethod event-store-global-position-supported-p

@@ -1,6 +1,6 @@
 (in-package #:cl-event-sourcing-kit)
 
-(defclass in-memory-event-store (event-store)
+(defclass in-memory-event-store ()
   ((streams
     :initform
     (make-hash-table :test #'equal)

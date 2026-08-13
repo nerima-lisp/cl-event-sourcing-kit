@@ -1,6 +1,6 @@
 (in-package #:cl-event-sourcing-kit/test)
 
-(defclass invalid-snapshot-result-store (event-store)
+(defclass invalid-snapshot-result-store ()
   ())
 
 (defmethod event-store-snapshots-supported-p
@@ -13,7 +13,7 @@
   (declare (ignore store stream-id version))
   :not-a-snapshot)
 
-(defclass mismatched-snapshot-store (event-store)
+(defclass mismatched-snapshot-store ()
   ())
 
 (defmethod event-store-snapshots-supported-p
@@ -32,7 +32,7 @@
    :state
    0))
 
-(defclass invalid-snapshot-version-store (event-store)
+(defclass invalid-snapshot-version-store ()
   ())
 
 (defmethod event-store-snapshots-supported-p
@@ -52,7 +52,7 @@
    :state
    0))
 
-(defclass invalid-replay-event-store (event-store)
+(defclass invalid-replay-event-store ()
   ())
 
 (defmethod event-store-read
@@ -60,7 +60,7 @@
   (declare (ignore store stream-id from-version to-version))
   (list :not-an-event))
 
-(defclass mismatched-replay-event-store (event-store)
+(defclass mismatched-replay-event-store ()
   ())
 
 (defmethod event-store-read
@@ -68,7 +68,7 @@
   (declare (ignore store stream-id from-version to-version))
   (list (make-test-event "wrong-stream-event" "other-stream" :wrong)))
 
-(defclass non-advancing-replay-event-store (event-store)
+(defclass non-advancing-replay-event-store ()
   ())
 
 (defmethod event-store-read
@@ -82,7 +82,16 @@
     :version
     0)))
 
-(defclass unassigned-replay-event-store (event-store)
+(defclass non-contiguous-replay-event-store ()
+  ())
+
+(defmethod event-store-read
+    ((store non-contiguous-replay-event-store) stream-id &key from-version to-version)
+  (declare (ignore store from-version to-version))
+  (list
+   (make-test-event "version-2" stream-id :version-2 :version 2)))
+
+(defclass unassigned-replay-event-store ()
   ())
 
 (defmethod event-store-read
@@ -193,6 +202,16 @@
 
 (describe
  "replay schema evolution and aggregate loading"
+ (it
+  "loads an empty aggregate when no snapshot is available"
+  (multiple-value-bind (state version)
+      (load-aggregate
+       (make-event-store)
+       "empty-schema-stream"
+       42
+       #'identity)
+    (expect state :to-be 42)
+    (expect version :to-be 0)))
  (it
   "upcasts stored events and starts aggregate replay from a snapshot"
   (let* ((store (make-event-store))
@@ -409,6 +428,15 @@
            nil)
         (invalid-domain-event () (setf caught t)))
       (expect caught :to-be t))
+    (signals
+     invalid-domain-event
+     (load-aggregate
+      (make-instance 'non-contiguous-replay-event-store)
+      "schema-stream"
+      0
+      #'identity
+      :use-snapshot
+      nil))
     (event-store-append
      store
      "schema-stream"

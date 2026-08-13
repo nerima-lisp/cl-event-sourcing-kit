@@ -28,9 +28,9 @@
                                 (owner-id *unspecified*)
                                 (fencing-token *unspecified*)
                                 (expires-at *unspecified*))
-  "Construct a lease value for a custom lease-store adapter.
+  "Construct a lease value for a custom lease-store backend.
 
-Adapters normally return values created by this function from their
+Store implementations normally return values created by this function from their
 transactional acquire/renew operations.  FENCING-TOKEN must increase for a
 consumer whenever ownership changes; consumers should include it in every
 side effect that needs stale-owner protection."
