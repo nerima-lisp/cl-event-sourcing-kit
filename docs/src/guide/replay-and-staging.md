@@ -21,7 +21,7 @@ the event sequence.
 `upcast-event` and `upcast-events` are the schema-evolution boundary. An
 upcaster receives a stored `domain-event` and returns a domain event in the
 shape expected by the current reducer. The upcaster can be a registry, a
-chain, or an backend-specific function; the core does not select a wire
+chain, or a backend-specific function; the core does not select a wire
 format.
 
 `load-aggregate` accepts the same `:upcaster` policy and validates the event
@@ -58,5 +58,8 @@ An append failure leaves the staged events available for inspection or retry.
 
 The synchronous operations are the primary API. The optional CPS macros expose
 the same boundaries through success and error continuations for applications
-that use continuation-passing control flow. They do not introduce background
-work or change transaction semantics.
+that use continuation-passing control flow. The exported entry points are
+`event-store-append/cc`, `event-store-append-batch/cc`, `event-store-read/cc`,
+`replay-events/cc`, `commit-events/cc`, `rebuild-projection/cc`, and
+`advance-projection/cc`. They run synchronously and do not change transaction
+semantics.

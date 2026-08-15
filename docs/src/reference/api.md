@@ -52,6 +52,16 @@ value objects.
 and `commit-events` provide pure reconstruction and a small command-side
 session.
 
+### CPS entry points
+
+The core also exports synchronous continuation-shaped entry points:
+`event-store-append/cc`, `event-store-append-batch/cc`, `event-store-read/cc`,
+`replay-events/cc`, `commit-events/cc`, `rebuild-projection/cc`, and
+`advance-projection/cc`. Each accepts success and error continuations while
+preserving the validation and transaction semantics of its synchronous
+counterpart. `define-cps-operation` is the exported macro for defining an
+operation with the same boundary.
+
 ## In-memory system
 
 `make-event-store` creates the reference in-memory implementation. It supports

@@ -3,7 +3,7 @@
 `cl-event-sourcing-kit` is a domain-independent event sourcing protocol for
 Common Lisp. It defines the consistency boundary around an event stream while
 leaving storage, serialization, transactions, and business policy to an
-  backend or application.
+backend or application.
 
 The core keeps event payloads and metadata opaque. The optional systems add a
 reference in-memory store, synchronous projections, and a recoverable durable

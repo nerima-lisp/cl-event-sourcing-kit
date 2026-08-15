@@ -33,7 +33,7 @@ feed and is meaningful only when
 `event-store-global-position-supported-p` is true. The same capability style
 is used for snapshots and retention.
 
-The base methods signal `event-store-operation-not-supported` with a
+The default protocol methods signal `event-store-operation-not-supported` with a
 structured operation value. Each backend should advertise unsupported
 capabilities rather than silently returning a weaker result.
 
@@ -56,7 +56,7 @@ Event IDs are unique across the store. The reference in-memory semantics are:
 1. Re-appending an equivalent ID returns the canonical committed event without
    advancing the stream version.
 2. Equivalence compares the envelope fields while ignoring store-assigned
-   `version` and `global-position`. An backend may specialize
+   `version` and `global-position`. A backend may specialize
    `event-store-event-equivalent-p`.
 3. Reusing an ID for a different envelope signals
    `duplicate-event-id-conflict`.

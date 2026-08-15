@@ -65,7 +65,7 @@ synchronous run and persists the result after successful handling.
 The upcaster registry supports exact schema-version transitions. The observed
 store and retry helpers provide operational hooks without changing event-store
 semantics. Retention APIs expose capability and floor information; pruning
-policy remains an backend and application decision.
+policy remains a backend and application decision.
 
 ## Explicit limits
 

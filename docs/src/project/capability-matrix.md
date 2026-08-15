@@ -3,7 +3,7 @@
 Event sourcing has two different meanings of "production ready": a library
 can provide precise stream semantics, while a deployment still needs a
 storage, coordination, security, and operations policy. This matrix records
-both sides so that an backend cannot accidentally inherit a guarantee from the
+both sides so that a backend cannot accidentally inherit a guarantee from the
 portable reference runtime.
 
 ## Capabilities
