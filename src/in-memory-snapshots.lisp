@@ -32,12 +32,18 @@ previous snapshot."
      (store)
      (multiple-value-bind (actual-version exists-p)
          (%in-memory-current-version-locked store canonical-stream-id)
-       (when (and (not exists-p) (> version 0))
-         (error 'invalid-snapshot :stream-id stream-id :version version
-                :reason :missing-stream))
+       (when (and (not exists-p) (plusp version))
+         (error
+          'invalid-snapshot
+          :stream-id stream-id
+          :version version
+          :reason :missing-stream))
        (when (> version actual-version)
-         (error 'invalid-snapshot :stream-id stream-id :version version
-                :reason :future-version))
+         (error
+          'invalid-snapshot
+          :stream-id stream-id
+          :version version
+          :reason :future-version))
        (let ((canonical-snapshot
                (make-event-snapshot
                 :stream-id canonical-stream-id
@@ -52,7 +58,9 @@ previous snapshot."
          canonical-snapshot)))))
 
 (defmethod event-store-read-snapshot ((store in-memory-event-store)
-                                      stream-id &key version)
+                                      stream-id
+                                      &key
+                                      version)
   "Read the latest snapshot whose version is not newer than VERSION."
   (%ensure-in-memory-stream-id stream-id)
   (%validate-read-bound version)
@@ -71,3 +79,7 @@ previous snapshot."
    (store)
    (remhash (%in-memory-identity-key stream-id)
             (%in-memory-snapshots store))))
+
+(defmethod event-store-snapshots-supported-p ((store in-memory-event-store))
+  (declare (ignore store))
+  t)

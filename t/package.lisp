@@ -3,8 +3,11 @@
   (:shadowing-import-from #:cl-weave #:describe)
   (:import-from #:cl-weave
                 #:expect
+                #:gen-integer
+                #:gen-list
                 #:it
                 #:it-each
+                #:it-property
                 #:run-all
                 #:signals
                 #:with-continuation-result)
@@ -55,7 +58,7 @@ paredit definition inspector in the verification workflow.")
            (set-difference *declarative-source-file-names*
                            available-names
                            :test #'string=)))
-    (unless (null missing-declarations)
+    (when missing-declarations
       (error
        "The declarative source manifest names missing files: ~S"
        missing-declarations))

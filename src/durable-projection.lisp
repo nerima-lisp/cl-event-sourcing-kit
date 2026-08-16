@@ -184,6 +184,7 @@
                                         (event-store *unspecified*)
                                         (checkpoint-store *unspecified*)
                                         (checkpoint-key *unspecified*)
+                                        state-copy
                                         lock)
   (unless (projection-p projection)
     (error 'type-error :datum projection :expected-type 'projection))
@@ -196,12 +197,17 @@
     (error 'event-store-operation-not-supported
            :operation 'make-durable-projection-runner
            :store event-store))
+  (unless (or (null state-copy) (functionp state-copy))
+    (error 'type-error
+           :datum state-copy
+           :expected-type '(or null function)))
   (let ((runner
           (make-instance 'durable-projection-runner
                          :projection projection
                          :event-store event-store
                          :checkpoint-store checkpoint-store
                          :checkpoint-key checkpoint-key
+                         :state-copy state-copy
                          :lock (or lock (%durable-lock "projection-runner")))))
     (unless (typep (%durable-runner-lock runner)
                    'cl-concurrent-kit:lock)
@@ -211,21 +217,33 @@
     (let ((record (projection-checkpoint-load checkpoint-store checkpoint-key)))
       (if record
           (setf (slot-value projection 'state)
-                (projection-checkpoint-record-state record)
+                (%durable-runner-copy-state
+                 runner
+                 (projection-checkpoint-record-state record))
                 (slot-value projection 'checkpoint)
                 (projection-checkpoint-record-position record))
         (projection-checkpoint-save
          checkpoint-store
          checkpoint-key
          (make-projection-checkpoint-record
-          :state (projection-state projection)
+          :state (%durable-runner-copy-state
+                  runner
+                  (projection-state projection))
           :position (projection-checkpoint projection)
           :updated-at (get-universal-time)))))
     runner))
 
+(defun %durable-runner-copy-state (runner state)
+  (let ((state-copy (%durable-runner-state-copy runner)))
+    (if state-copy
+        (funcall state-copy state)
+        state)))
+
 (defun %durable-runner-record (runner)
   (make-projection-checkpoint-record
-   :state (projection-state (durable-projection-runner-projection runner))
+   :state (%durable-runner-copy-state
+           runner
+           (projection-state (durable-projection-runner-projection runner)))
    :position (projection-checkpoint
               (durable-projection-runner-projection runner))
    :updated-at (get-universal-time)))
@@ -240,10 +258,14 @@
            (saved (projection-checkpoint-load checkpoint-store key)))
       (when saved
         (setf (slot-value projection 'state)
-              (projection-checkpoint-record-state saved)
+              (%durable-runner-copy-state
+               runner
+               (projection-checkpoint-record-state saved))
               (slot-value projection 'checkpoint)
               (projection-checkpoint-record-position saved)))
-      (let ((before-state (projection-state projection))
+      (let ((before-state (%durable-runner-copy-state
+                           runner
+                           (projection-state projection)))
             (before-checkpoint (projection-checkpoint projection)))
         (handler-case
             (multiple-value-bind (state checkpoint)

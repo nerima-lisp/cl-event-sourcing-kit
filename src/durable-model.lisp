@@ -21,7 +21,11 @@
    (lock :initarg :lock :reader %file-event-store-lock)
    (global-position-start
     :initarg :global-position-start
-    :reader %file-event-store-global-position-start)
+    :accessor %file-event-store-global-position-start)
+   (global-position-start-supplied-p
+    :initarg :global-position-start-supplied-p
+    :initform nil
+    :reader %file-event-store-global-position-start-supplied-p)
    (next-transaction-id
     :initarg :next-transaction-id
     :accessor %file-event-store-next-transaction-id)))
@@ -187,6 +191,7 @@
     :initarg :checkpoint-store
     :reader durable-projection-runner-checkpoint-store)
    (checkpoint-key :initarg :checkpoint-key :reader %durable-runner-key)
+   (state-copy :initarg :state-copy :initform nil :reader %durable-runner-state-copy)
    (lock :initarg :lock :reader %durable-runner-lock)))
 
 (define-store-operation run-projection-once (runner &key limit))

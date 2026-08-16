@@ -66,7 +66,8 @@
 (defmethod event-store-read
     ((store mismatched-replay-event-store) stream-id &key from-version to-version)
   (declare (ignore store stream-id from-version to-version))
-  (list (make-test-event "wrong-stream-event" "other-stream" :wrong)))
+  (list (make-test-event "wrong-stream-event" "other-stream" :wrong
+                         :version 1)))
 
 (defclass non-advancing-replay-event-store ()
   ())
@@ -314,6 +315,17 @@
      invalid-domain-event
      (upcast-event event (lambda (current) (declare (ignore current)) :not-event)))
     (signals
+     event-sourcing-error
+     (upcast-event
+      event
+      (lambda (stored-event)
+        (make-test-event
+         "changed-id"
+         "schema-stream"
+         (domain-event-payload stored-event)
+         :version
+         (domain-event-version stored-event)))))
+    (signals
      type-error
      (load-aggregate
       store
@@ -437,6 +449,13 @@
       #'identity
       :use-snapshot
       nil))
+    (let ((caught nil))
+      (handler-case
+          (cl-event-sourcing-kit::%validate-aggregate-event
+           event
+           "other-stream")
+        (invalid-domain-event () (setf caught t)))
+      (expect caught :to-be t))
     (event-store-append
      store
      "schema-stream"
@@ -460,5 +479,5 @@
               (domain-event-payload stored-event)
               :version
               (domain-event-version stored-event))))
-        (invalid-domain-event () (setf caught t)))
+        (event-sourcing-error () (setf caught t)))
       (expect caught :to-be t)))))
