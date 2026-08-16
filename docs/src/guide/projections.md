@@ -28,6 +28,11 @@ The core cannot roll back side effects a handler has already performed on an
 externally mutable object. Prefer immutable state or an application-owned
 transaction around side effects and checkpoint persistence.
 
+The durable runner accepts `:state-copy` for mutable projection state. The
+function must return an independent snapshot; the runner uses it for rollback
+and checkpoint records. Without it, mutable state retains opaque reference
+semantics.
+
 ## Operational boundary
 
 The projection system is not a daemon or scheduler. Scheduling, process

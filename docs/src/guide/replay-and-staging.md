@@ -22,7 +22,11 @@ the event sequence.
 upcaster receives a stored `domain-event` and returns a domain event in the
 shape expected by the current reducer. The upcaster can be a registry, a
 chain, or a backend-specific function; the core does not select a wire
-format.
+format. It may change the payload and schema version, but must preserve the
+event envelope: identity, type, stream and aggregate identity, metadata,
+timestamp, stream version, correlation and causation identifiers, and global
+position. Violating this rule signals `event-sourcing-error`, because changing
+those fields would alter ordering or event identity during replay.
 
 `load-aggregate` accepts the same `:upcaster` policy and validates the event
 stream before reducing it. Pass `:use-snapshot NIL` when a caller needs a full
