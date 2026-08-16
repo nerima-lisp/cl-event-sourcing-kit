@@ -11,7 +11,8 @@
    (:batch-append)
    (:global-position)
    (:snapshots)
-   (:retention))
+   (:retention)
+   (:process-local-lock))
   "advertises the in-memory ~A guarantee"
   (capability)
   (expect

@@ -296,7 +296,6 @@ the protocol and its reference semantics.")
    #:observed-event-store
    #:observed-event-store-p
    #:make-observed-event-store
-   #:with-retries
    #:event-store-prune
    #:event-store-retention-supported-p
    #:event-store-retention-floor

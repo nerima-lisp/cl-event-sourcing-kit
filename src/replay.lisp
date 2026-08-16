@@ -21,12 +21,12 @@ performed."
 
 (defun %validate-aggregate-event (event stream-id)
   (let ((event (%validate-committed-event event)))
-    (unless (%safe-equal-p stream-id (domain-event-stream-id event))
-      (%invalid-domain-event
-       event
-       :stream-id
-       "The event belongs to a different aggregate stream."))
-    event))
+    (if (%safe-equal-p stream-id (domain-event-stream-id event))
+        event
+        (%invalid-domain-event
+         event
+         :stream-id
+         "The event belongs to a different aggregate stream."))))
 
 (defun load-aggregate (store stream-id initial-state reducer
                        &key

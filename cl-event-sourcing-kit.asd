@@ -49,6 +49,9 @@ adapters or optional systems."
                       (funcall next)))
   :components ((:file "in-memory-model")
                (:file "in-memory-operations")
+               (:file "in-memory-batch")
+               (:file "in-memory-snapshots")
+               (:file "in-memory-state")
                (:file "in-memory-queries")))
 
 (asdf:defsystem "cl-event-sourcing-kit/projection"
@@ -69,10 +72,11 @@ adapters or optional systems."
   :description "Durable reference implementation and application-runtime protocols."
   :long-description "A safe S-expression serializer, crash-tolerant append log
 implementation, at-least-once subscriptions with offsets, application outbox,
-durable projection checkpoints, upcaster registry, and operational wrappers."
+durable projection checkpoints, upcaster registry, and resilience policies."
   :depends-on ("cl-event-sourcing-kit/in-memory"
                "cl-event-sourcing-kit/projection"
-               "cl-concurrent-kit")
+               "cl-concurrent-kit"
+               "cl-resilience-kit")
   :pathname "src"
   :serial t
   :around-compile (lambda (next)
@@ -83,6 +87,7 @@ durable projection checkpoints, upcaster registry, and operational wrappers."
                (:file "durable-model-operations")
                (:file "durable-macros")
                (:file "durable-serialization")
+               (:file "durable-file-journal")
                (:file "durable-file-store")
                (:file "durable-subscription-lease")
                (:file "durable-subscription")
@@ -108,6 +113,7 @@ durable projection checkpoints, upcaster registry, and operational wrappers."
                (:file "replay-staging-test")
                (:file "projection-test")
                (:file "macro-cps-test")
+               (:file "property-contract-test")
                (:file "quick-start-test")
                (:file "durable-test")
                (:file "durable-contract-test")
