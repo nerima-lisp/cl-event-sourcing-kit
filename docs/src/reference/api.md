@@ -85,7 +85,7 @@ The durable exports include:
 - projection checkpoint stores, `make-durable-projection-runner`, and
   `run-projection-once`;
 - `upcaster-registry`, `register-upcaster`, `make-observed-event-store`, and
-  `with-retries`.
+  direct `cl-resilience-kit` retry policies via `resilience-kit:with-retry`.
 
 Consult [Durable runtime](../guide/durable-runtime.md) for guarantees and
 limitations rather than treating these reference implementations as a
@@ -98,4 +98,4 @@ distributed service.
 | `cl-event-sourcing-kit` | `cl-boundary-kit` | Core protocol, replay, staging, conditions, CPS. |
 | `cl-event-sourcing-kit/in-memory` | Core, `cl-concurrent-kit` | Reference event store. |
 | `cl-event-sourcing-kit/projection` | Core | Projection and rebuild. |
-| `cl-event-sourcing-kit/durable` | In-memory, projection, `cl-concurrent-kit` | File persistence, delivery, outbox, checkpoints, evolution. |
+| `cl-event-sourcing-kit/durable` | In-memory, projection, `cl-concurrent-kit`, `cl-resilience-kit` | File persistence, delivery, outbox, checkpoints, evolution. |

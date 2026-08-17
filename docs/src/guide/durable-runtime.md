@@ -22,6 +22,14 @@ records operations in a line-oriented journal. `recover-file-event-store`
 replays committed records, tolerates an incomplete final record, and signals
 `durable-store-corruption` for malformed complete records.
 
+The file journal persists its `:global-position-start` in a configuration
+record. Reopening without an explicit origin restores the persisted value;
+providing a different explicit origin signals an error instead of silently
+renumbering the global feed. Existing complete journals are upgraded when
+they are first reopened. An incomplete final record is ignored as an
+uncommitted tail and, after successful recovery, removed by an atomic rewrite
+so a later append cannot be joined to the partial line.
+
 Offset, outbox, and checkpoint files use temporary-file replacement. Their
 `:sync` hooks default to `finish-output`: this flushes the Lisp stream but is
 not an operating-system `fsync` guarantee. The file lock registry is
@@ -62,10 +70,19 @@ update metadata. `make-durable-projection-runner` combines a projection,
 event store, and checkpoint store; `run-projection-once` performs one
 synchronous run and persists the result after successful handling.
 
-The upcaster registry supports exact schema-version transitions. The observed
-store and retry helpers provide operational hooks without changing event-store
-semantics. Retention APIs expose capability and floor information; pruning
-policy remains an adapter and application decision.
+When projection state is mutable, pass `:state-copy` to the durable runner.
+It must return an independent snapshot; the runner uses that function for
+checkpoint records, restart, and rollback after a failed handler or save.
+Without it, state retains opaque reference semantics and in-place mutations
+cannot be undone.
+
+The upcaster registry supports exact schema-version transitions. Retry policy
+comes directly from `cl-resilience-kit`: construct an explicit, fail-closed
+`resilience-kit:make-retry-policy` and use `resilience-kit:with-retry` or
+`resilience-kit:call-with-retry` at the operation boundary. These policies add
+retry behavior without changing event-store semantics. Retention APIs expose
+capability and floor information; pruning policy remains an adapter and
+application decision.
 
 ## Explicit limits
 

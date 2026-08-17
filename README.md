@@ -46,7 +46,7 @@ implements the same event-store protocol when persistence is required.
 - `cl-event-sourcing-kit/projection`: projection and rebuild support.
 - `cl-event-sourcing-kit/durable`: safe serialization, recoverable file
   storage, subscriptions, outbox delivery, durable projection checkpoints,
-  upcasters, retention, and operational wrappers.
+  upcasters, retention, and direct `cl-resilience-kit` policies.
 
 The durable system is a portable reference runtime, not a distributed
 database, broker, scheduler, or high-availability deployment. Future database
