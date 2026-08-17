@@ -8,7 +8,8 @@ model.
 
 [Documentation](https://nerima-lisp.github.io/cl-event-sourcing-kit/) ·
 [Documentation source](docs/src/index.md) ·
-[Capability matrix](docs/src/project/capability-matrix.md)
+[Capability matrix](docs/src/project/capability-matrix.md) ·
+[Changelog](CHANGELOG.md)
 
 ## Quick start
 
@@ -84,4 +85,4 @@ coverage, benchmark, and documentation commands.
 
 ## License
 
-MIT. See the license declaration in `cl-event-sourcing-kit.asd`.
+MIT. See [`LICENSE`](LICENSE).
