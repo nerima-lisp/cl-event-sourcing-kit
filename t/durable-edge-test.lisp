@@ -1030,10 +1030,18 @@
             nil)
     (signals type-error
       (cl-event-sourcing-kit::%default-deserialize-value 1 serializer))
-    (signals event-serialization-error
+    ;; #1=/#1# datum-label syntax is rejected by the pre-read dispatch
+    ;; scan -- the same guard-clause boundary as the STRINGP check above,
+    ;; not the post-read safety walk -- so it signals a plain ERROR rather
+    ;; than EVENT-SERIALIZATION-ERROR.  Without this rejection, a payload
+    ;; built from shared (not just circular) datum-label references costs
+    ;; exponential time to validate; see %unsafe-reader-dispatch-p.
+    (signals error
       (cl-event-sourcing-kit::%default-deserialize-value
        "#1=(a . #1#)"
        serializer))
+    (signals event-serialization-error
+      (deserialize-value "#1=(a . #1#)" :serializer serializer))
     (signals event-serialization-error
       (deserialize-value 1))
     (signals event-serialization-error
@@ -1101,6 +1109,79 @@
           (lambda (stream)
             (declare (ignore stream))
             (error "sync failed"))))
+       (expect (cl-event-sourcing-kit::%truncate-condition-payload "short")
+               :to-equal
+               "short")
+       (let ((truncated
+               (cl-event-sourcing-kit::%truncate-condition-payload
+                (make-string 5000 :initial-element #\x))))
+         (expect (< (length truncated) 5000) :to-be-truthy)
+         (expect (search "truncated" truncated) :to-be-truthy))
+       ;; A value that clears the pre-read reader-dispatch scan (no #
+       ;; syntax at all) but exceeds the safety walk's depth limit still
+       ;; reaches the post-read rejection path, distinct from the datum-
+       ;; label case rejected earlier by the pre-read scan.
+       (signals event-serialization-error
+         (cl-event-sourcing-kit::%default-deserialize-value
+          (with-output-to-string (s)
+            (dotimes (i 70) (write-string "(1 . " s))
+            (write-string "1" s)
+            (dotimes (i 70) (write-string ")" s)))
+          serializer))
+       (call-with-durable-test-path
+        "serialization-read-bound"
+        (lambda (bounded-path)
+          (write-durable-edge-lines
+           bounded-path
+           (list (make-string 100 :initial-element #\x)))
+          (signals event-serialization-error
+            (cl-event-sourcing-kit::%read-serialized-file
+             bounded-path
+             (make-event-serializer :max-bytes 10)))))
+       ;; Exclusive temp-file creation retries past a name that already
+       ;; exists (a live risk since GENSYM resets per process) instead of
+       ;; silently overwriting it.
+       (let* ((counter cl:*gensym-counter*)
+              (predicted
+                (let ((cl:*gensym-counter* counter))
+                  (cl-event-sourcing-kit::%durable-temporary-pathname path))))
+         (unwind-protect
+              (progn
+                (write-durable-edge-lines predicted (list "(:pre-existing t)"))
+                (let ((cl:*gensym-counter* counter))
+                  (expect
+                   (cl-event-sourcing-kit::%write-serialized-file
+                    path
+                    '(:after-retry t)
+                    nil)
+                   :to-equal
+                   '(:after-retry t)))
+                (expect (cl-event-sourcing-kit::%read-serialized-file path nil)
+                        :to-equal
+                        '(:after-retry t))
+                (expect (probe-file predicted) :to-be-truthy))
+           (when (probe-file predicted) (delete-file predicted))))
+       ;; Exhausting every retry attempt (every candidate name already
+       ;; taken) is a structured failure, not an infinite loop.
+       (let ((counter cl:*gensym-counter*)
+             (blockers nil))
+         (unwind-protect
+              (progn
+                (let ((cl:*gensym-counter* counter))
+                  (dotimes (i 8)
+                    (let ((blocker
+                            (cl-event-sourcing-kit::%durable-temporary-pathname
+                             path)))
+                      (push blocker blockers)
+                      (write-durable-edge-lines blocker (list "(:blocked t)")))))
+                (let ((cl:*gensym-counter* counter))
+                  (signals event-serialization-error
+                    (cl-event-sourcing-kit::%write-serialized-file
+                     path
+                     '(:never t)
+                     nil))))
+           (dolist (blocker blockers)
+             (when (probe-file blocker) (delete-file blocker)))))
        (let* ((base (host-kit:temporary-directory))
               (target-name
                 (format nil "cl-event-sourcing-kit-~A"
@@ -1784,3 +1865,14 @@
                         :to-be
                         1))
            (close-file-event-store store)))))))
+
+(describe
+ "durable log line byte-limit contracts"
+ (it "rejects a single log line that exceeds the configured byte limit"
+   (call-with-durable-test-path
+    "file-log-line-bound"
+    (lambda (path)
+      (write-durable-edge-lines path (list (make-string 200 :initial-element #\x)))
+      (signals event-serialization-error
+        (make-file-event-store :path path
+                               :serializer (make-event-serializer :max-bytes 10)))))))

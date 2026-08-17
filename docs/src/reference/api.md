@@ -106,7 +106,7 @@ distributed service.
 
 | System | Depends on | Main additions |
 | --- | --- | --- |
-| `cl-event-sourcing-kit` | `cl-boundary-kit` | Core protocol, replay, staging, conditions, CPS. |
+| `cl-event-sourcing-kit` | `cl-boundary-kit`, `cl-weave` | Core protocol, replay, staging, conditions, CPS. |
 | `cl-event-sourcing-kit/in-memory` | Core, `cl-concurrent-kit` | Reference event store. |
 | `cl-event-sourcing-kit/projection` | Core | Projection and rebuild. |
 | `cl-event-sourcing-kit/durable` | In-memory, projection, `cl-concurrent-kit`, `cl-resilience-kit` | File persistence, delivery, outbox, checkpoints, evolution. |

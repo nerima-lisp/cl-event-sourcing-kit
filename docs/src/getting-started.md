@@ -56,9 +56,10 @@ for its guarantees and limits before using it as a deployment boundary.
 
 | Use | ASDF dependency |
 | --- | --- |
-| Core | `cl-boundary-kit` |
-| In-memory and durable systems | `cl-concurrent-kit` in addition to the core |
-| Repository tests and coverage | `cl-host-kit` and `cl-weave` |
+| Core | `cl-boundary-kit` and `cl-weave` |
+| In-memory system | `cl-concurrent-kit` in addition to the core |
+| Durable system | `cl-concurrent-kit` and `cl-resilience-kit` in addition to the in-memory and projection systems |
+| Repository tests and coverage | `cl-host-kit` in addition to the core |
 
 The repository's Nix flake pins the development inputs. Run `nix develop` for
 the reproducible shell; the commands are collected in

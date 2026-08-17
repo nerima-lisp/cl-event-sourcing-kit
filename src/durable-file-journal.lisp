@@ -37,7 +37,7 @@
     (when (or (position #\Newline serialized)
               (position #\Return serialized))
       (error 'event-serialization-error
-             :value record
+             :value (%truncate-condition-payload record)
              :direction :encode
              :cause "Event log records must be one line."))
     serialized))
@@ -49,22 +49,20 @@
   record)
 
 (defun %replace-file-log-records (store records)
-  (let* ((path (file-event-store-path store))
-         (temporary (%durable-temporary-pathname path)))
-    (unwind-protect
-         (progn
-           (with-open-file (stream temporary
-                                   :direction :output
-                                   :if-exists :supersede
-                                   :if-does-not-exist :create)
+  (let ((path (file-event-store-path store)))
+    (multiple-value-bind (stream temporary) (%open-durable-temporary-file path)
+      (unwind-protect
+           (progn
              (dolist (record records)
                (write-line (%serialized-file-log-record store record)
                            stream))
-             (funcall (%file-event-store-sync store) stream))
-           (rename-file temporary path)
-           t)
-      (when (probe-file temporary)
-        (delete-file temporary)))))
+             (funcall (%file-event-store-sync store) stream)
+             (close stream)
+             (rename-file temporary path)
+             t)
+        (close stream)
+        (when (probe-file temporary)
+          (delete-file temporary))))))
 
 (defun %file-operation-events (wire-events)
   (unless (%proper-list-p wire-events)
@@ -119,11 +117,39 @@
       (error cause)
       (error 'durable-store-corruption
              :path (file-event-store-path store)
-             :record record
+             :record (%truncate-condition-payload record)
              :cause cause)))
 
+(defun %read-bounded-line (stream max-bytes)
+  "Like READ-LINE, but signals when a single line would pass MAX-BYTES before
+a newline is found, so a corrupted or adversarial log line cannot force
+unbounded buffering of one line before any size limit applies."
+  (let ((buffer (make-string-output-stream))
+        (length 0)
+        (saw-character-p nil))
+    (loop for character = (read-char stream nil nil)
+          do (cond
+               ((null character)
+                (return (if saw-character-p
+                            (values (get-output-stream-string buffer) t)
+                            (values nil nil))))
+               ((char= character #\Newline)
+                (return (values (get-output-stream-string buffer) nil)))
+               (t
+                (setf saw-character-p t)
+                (incf length)
+                (when (and max-bytes (> length max-bytes))
+                  (error 'event-serialization-error
+                         :value (%truncate-condition-payload
+                                 (get-output-stream-string buffer))
+                         :direction :decode
+                         :cause "A durable log line exceeds the configured byte limit."))
+                (write-char character buffer))))))
+
 (defun %read-file-log-records (store)
-  (let ((path (file-event-store-path store)))
+  (let ((path (file-event-store-path store))
+        (max-bytes (%event-serializer-max-bytes
+                    (%file-event-store-serializer store))))
     (if (not (probe-file path))
         (list nil nil)
         (with-open-file (stream path :direction :input)
@@ -131,7 +157,7 @@
                 (incomplete-final-record-p nil))
             (loop
               (multiple-value-bind (line missing-newline-p)
-                  (read-line stream nil nil)
+                  (%read-bounded-line stream max-bytes)
                 (when (null line)
                   (return))
                 ;; A process may die in the middle of its final line.  The
