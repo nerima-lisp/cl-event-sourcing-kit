@@ -21,8 +21,7 @@ the event sequence.
 `upcast-event` and `upcast-events` are the schema-evolution boundary. An
 upcaster receives a stored `domain-event` and returns a domain event in the
 shape expected by the current reducer. The upcaster can be a registry, a
-chain, or a backend-specific function; the core does not select a wire
-format. It may change the payload and schema version, but must preserve the
+chain, or an adapter-specific function; the core does not select a wire
 event envelope: identity, type, stream and aggregate identity, metadata,
 timestamp, stream version, correlation and causation identifiers, and global
 position. Violating this rule signals `event-sourcing-error`, because changing
