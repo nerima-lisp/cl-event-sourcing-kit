@@ -165,7 +165,7 @@
      (lambda (state event)
        (declare (ignore event))
        state))
-    (make-instance 'unsupported-store))))
+    (make-instance 'unsupported-store)))
   (signals
    event-store-operation-not-supported
    (advance-projection
@@ -231,7 +231,7 @@
        state))
    (make-event-store)
     :from-global-position
-    -1)))
+    -1))))
 
 (describe
  "restartable and defensive projection advancement"

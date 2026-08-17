@@ -85,4 +85,5 @@ coverage, benchmark, and documentation commands.
 
 ## License
 
-MIT. See the license declaration in `cl-event-sourcing-kit.asd`.
+MIT. See [`LICENSE`](LICENSE) and the license declaration in
+`cl-event-sourcing-kit.asd`.
