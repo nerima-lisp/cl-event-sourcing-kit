@@ -27,8 +27,8 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    cl-prolog = {
-      url = "github:nerima-lisp/cl-prolog/v1.4.3";
+    cl-prolog-kit = {
+      url = "github:nerima-lisp/cl-prolog-kit/v1.5.0";
       inputs.nixpkgs.follows = "nixpkgs";
       inputs.cl-weave.follows = "cl-weave";
       inputs.paredit-cli.follows = "paredit-cli";
@@ -45,10 +45,10 @@
     };
 
     cl-boundary-kit = {
-      url = "github:nerima-lisp/cl-boundary-kit/v2.3.0";
+      url = "github:nerima-lisp/cl-boundary-kit/b160c1433d51802f69ea0e71a6db9b419d277d0f";
       inputs.nixpkgs.follows = "nixpkgs";
       inputs.cl-weave.follows = "cl-weave";
-      inputs.cl-prolog.follows = "cl-prolog";
+      inputs.cl-prolog-kit.follows = "cl-prolog-kit";
       inputs.cl-host-kit.follows = "cl-host-kit";
       inputs.cl-nix-forge.follows = "cl-nix-forge";
       inputs.treefmt-nix.follows = "treefmt-nix";
