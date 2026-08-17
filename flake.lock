@@ -8,8 +8,8 @@
         "cl-nix-forge": [
           "cl-nix-forge"
         ],
-        "cl-prolog": [
-          "cl-prolog"
+        "cl-prolog-kit": [
+          "cl-prolog-kit"
         ],
         "cl-weave": [
           "cl-weave"
@@ -22,17 +22,17 @@
         ]
       },
       "locked": {
-        "lastModified": 1785937199,
-        "narHash": "sha256-FAuQIpnySCV4KoPm2ugbq/9uMsBGBO5XzF0SE3o0MTI=",
+        "lastModified": 1786973183,
+        "narHash": "sha256-sOKT0WpfWg++2JzQ4hL28VjNSY9ozv8nVkkzBF5fDio=",
         "owner": "nerima-lisp",
         "repo": "cl-boundary-kit",
-        "rev": "62e4a7df3e52061c38b7ff4f596436bdda985f71",
+        "rev": "b160c1433d51802f69ea0e71a6db9b419d277d0f",
         "type": "github"
       },
       "original": {
         "owner": "nerima-lisp",
-        "ref": "v2.3.0",
         "repo": "cl-boundary-kit",
+        "rev": "b160c1433d51802f69ea0e71a6db9b419d277d0f",
         "type": "github"
       }
     },
@@ -322,7 +322,7 @@
         "type": "github"
       }
     },
-    "cl-prolog_2": {
+    "cl-prolog-kit": {
       "inputs": {
         "cl-nix-forge": [
           "cl-nix-forge"
@@ -341,17 +341,17 @@
         ]
       },
       "locked": {
-        "lastModified": 1785918678,
-        "narHash": "sha256-Xr2Ga1qzz08MApO5N4v+bs/wmCC4FdJlYyjsC8TnXxU=",
+        "lastModified": 1786948477,
+        "narHash": "sha256-3qn9W1Jmbxnr0Si77J7Klo26oX/zjgBVwb5ye74NsTY=",
         "owner": "nerima-lisp",
-        "repo": "cl-prolog",
-        "rev": "7581f72c7d080afd4c863e1d44010ccb5d7258ad",
+        "repo": "cl-prolog-kit",
+        "rev": "239368e1001bc3a8576d45770c9e91da11515d09",
         "type": "github"
       },
       "original": {
         "owner": "nerima-lisp",
-        "ref": "v1.4.3",
-        "repo": "cl-prolog",
+        "ref": "v1.5.0",
+        "repo": "cl-prolog-kit",
         "type": "github"
       }
     },
@@ -522,7 +522,7 @@
         "cl-date-kit": "cl-date-kit",
         "cl-host-kit": "cl-host-kit_3",
         "cl-nix-forge": "cl-nix-forge",
-        "cl-prolog": "cl-prolog_2",
+        "cl-prolog-kit": "cl-prolog-kit",
         "cl-weave": "cl-weave_3",
         "nixpkgs": "nixpkgs",
         "paredit-cli": "paredit-cli_2",
