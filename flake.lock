@@ -8,9 +8,7 @@
         "cl-nix-forge": [
           "cl-nix-forge"
         ],
-        "cl-prolog": [
-          "cl-prolog"
-        ],
+        "cl-prolog": "cl-prolog",
         "cl-weave": [
           "cl-weave"
         ],
@@ -64,7 +62,7 @@
           "cl-nix-forge"
         ],
         "cl-process-kit": "cl-process-kit",
-        "cl-prolog": "cl-prolog",
+        "cl-prolog": "cl-prolog_2",
         "cl-weave": "cl-weave",
         "nixpkgs": [
           "cl-concurrent-kit",
@@ -306,23 +304,45 @@
       }
     },
     "cl-prolog": {
-      "flake": false,
+      "inputs": {
+        "cl-nix-forge": [
+          "cl-boundary-kit",
+          "cl-nix-forge"
+        ],
+        "cl-weave": [
+          "cl-boundary-kit",
+          "cl-weave"
+        ],
+        "nixpkgs": [
+          "cl-boundary-kit",
+          "nixpkgs"
+        ],
+        "paredit-cli": [
+          "cl-boundary-kit",
+          "cl-weave",
+          "paredit-cli"
+        ],
+        "treefmt-nix": [
+          "cl-boundary-kit",
+          "treefmt-nix"
+        ]
+      },
       "locked": {
-        "lastModified": 1785003722,
-        "narHash": "sha256-cL5wNd5TDZEIFxvhbBGTFYZOL+YB+boUBPK0yRV66r8=",
+        "lastModified": 1785918678,
+        "narHash": "sha256-Xr2Ga1qzz08MApO5N4v+bs/wmCC4FdJlYyjsC8TnXxU=",
         "owner": "nerima-lisp",
         "repo": "cl-prolog",
-        "rev": "a1352cee259b5476193255f21d8e56630f9893a9",
+        "rev": "7581f72c7d080afd4c863e1d44010ccb5d7258ad",
         "type": "github"
       },
       "original": {
         "owner": "nerima-lisp",
-        "ref": "v1.0.1",
+        "ref": "v1.4.3",
         "repo": "cl-prolog",
         "type": "github"
       }
     },
-    "cl-prolog_2": {
+    "cl-prolog-kit": {
       "inputs": {
         "cl-nix-forge": [
           "cl-nix-forge"
@@ -341,16 +361,33 @@
         ]
       },
       "locked": {
-        "lastModified": 1785918678,
-        "narHash": "sha256-Xr2Ga1qzz08MApO5N4v+bs/wmCC4FdJlYyjsC8TnXxU=",
+        "lastModified": 1786948477,
+        "narHash": "sha256-3qn9W1Jmbxnr0Si77J7Klo26oX/zjgBVwb5ye74NsTY=",
         "owner": "nerima-lisp",
-        "repo": "cl-prolog",
-        "rev": "7581f72c7d080afd4c863e1d44010ccb5d7258ad",
+        "repo": "cl-prolog-kit",
+        "rev": "239368e1001bc3a8576d45770c9e91da11515d09",
         "type": "github"
       },
       "original": {
         "owner": "nerima-lisp",
-        "ref": "v1.4.3",
+        "ref": "v1.5.0",
+        "repo": "cl-prolog-kit",
+        "type": "github"
+      }
+    },
+    "cl-prolog_2": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1785003722,
+        "narHash": "sha256-cL5wNd5TDZEIFxvhbBGTFYZOL+YB+boUBPK0yRV66r8=",
+        "owner": "nerima-lisp",
+        "repo": "cl-prolog",
+        "rev": "a1352cee259b5476193255f21d8e56630f9893a9",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nerima-lisp",
+        "ref": "v1.0.1",
         "repo": "cl-prolog",
         "type": "github"
       }
@@ -522,7 +559,7 @@
         "cl-date-kit": "cl-date-kit",
         "cl-host-kit": "cl-host-kit_3",
         "cl-nix-forge": "cl-nix-forge",
-        "cl-prolog": "cl-prolog_2",
+        "cl-prolog-kit": "cl-prolog-kit",
         "cl-weave": "cl-weave_3",
         "nixpkgs": "nixpkgs",
         "paredit-cli": "paredit-cli_2",
