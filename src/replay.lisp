@@ -21,12 +21,45 @@ performed."
 
 (defun %validate-aggregate-event (event stream-id)
   (let ((event (%validate-committed-event event)))
-    (unless (%safe-equal-p stream-id (domain-event-stream-id event))
-      (%invalid-domain-event
-       event
-       :stream-id
-       "The event belongs to a different aggregate stream."))
-    event))
+    (if (%safe-equal-p stream-id (domain-event-stream-id event))
+        event
+        (%invalid-domain-event
+         event
+         :stream-id
+         "The event belongs to a different aggregate stream."))))
+
+(defun %load-aggregate-snapshot (store stream-id initial-state use-snapshot)
+  (if (and use-snapshot
+           (event-store-snapshots-supported-p store))
+      (let ((snapshot (event-store-read-snapshot store stream-id)))
+        (if snapshot
+            (progn
+              (%validate-event-snapshot snapshot :stream-id stream-id)
+              (values (event-snapshot-state snapshot)
+                      (1+ (event-snapshot-version snapshot))
+                      (event-snapshot-version snapshot)))
+            (values initial-state nil 0)))
+      (values initial-state nil 0)))
+
+(defun %read-aggregate-events (store stream-id from-version upcaster)
+  (mapcar
+   (lambda (event)
+     (let ((validated (%validate-aggregate-event event stream-id)))
+       (%validate-aggregate-event
+        (upcast-event validated upcaster)
+        stream-id)))
+   (%coerce-event-list
+    (event-store-read store stream-id :from-version from-version))))
+
+(defun %validate-aggregate-version-order (events last-version)
+  (dolist (event events last-version)
+    (let ((version (domain-event-version event)))
+      (unless (= version (1+ last-version))
+        (%invalid-domain-event
+         event
+         :version-order
+         "The aggregate event versions are not contiguous."))
+      (setf last-version version))))
 
 (defun load-aggregate (store stream-id initial-state reducer
                        &key
@@ -37,46 +70,18 @@ performed."
 Snapshots are an optimization boundary: the reducer receives the snapshot
 state and only events after the snapshot version.  The store remains
 responsible for making a snapshot durable and consistent with its event log;
-the core validates the value returned by the adapter before using it.  The
+the core validates the value returned by the backend before using it.  The
 first return value is the aggregate state and the second is its last stream
 version (zero for an empty stream)."
   (when (eq use-snapshot *unspecified*)
     (setf use-snapshot t))
   (unless (or (null use-snapshot) (eq use-snapshot t))
     (error 'type-error :datum use-snapshot :expected-type 'boolean))
-  (let ((state initial-state)
-        (from-version nil)
-        (last-version 0))
-    (when (and use-snapshot
-               (event-store-snapshots-supported-p store))
-      (let ((snapshot (event-store-read-snapshot store stream-id)))
-        (when snapshot
-          (%validate-event-snapshot snapshot :stream-id stream-id)
-          (setf state (event-snapshot-state snapshot)
-                from-version (1+ (event-snapshot-version snapshot))
-                last-version (event-snapshot-version snapshot)))))
-    (let ((events
-            (mapcar
-             (lambda (event)
-               (let ((validated
-                       (%validate-aggregate-event event stream-id)))
-                 (%validate-aggregate-event
-                  (upcast-event validated upcaster)
-                  stream-id)))
-             (%coerce-event-list
-              (event-store-read
-               store
-               stream-id
-               :from-version
-               from-version)))))
-      (dolist (event events)
-        (let ((version (domain-event-version event)))
-          (unless (= version (1+ last-version))
-            (%invalid-domain-event
-             event
-             :version-order
-             "The aggregate event versions are not contiguous."))
-          (setf last-version version)))
-      (values
-       (replay-events state events reducer)
-       last-version))))
+  (multiple-value-bind (state from-version last-version)
+      (%load-aggregate-snapshot store stream-id initial-state use-snapshot)
+    (let ((events (%read-aggregate-events
+                   store stream-id from-version upcaster)))
+      (setf last-version
+            (%validate-aggregate-version-order events last-version))
+      (values (replay-events state events reducer)
+              last-version))))

@@ -207,7 +207,7 @@
     (expect (event-store-current-global-position store) :to-be 2)
     (expect (event-store-global-position-supported-p store) :to-be-truthy)))
  (it
-  "supports an adapter by subclassing the protocol directly"
+  "supports an store by subclassing the protocol directly"
   (let* ((store (make-instance 'protocol-store))
          (event (make-test-event "event-1" "stream-1" :payload)))
     (multiple-value-bind (events version) (event-store-append
@@ -227,7 +227,7 @@
      event-store-operation-not-supported
      (event-store-prune store :before-global-position 1))))
  (it
-  "reports unsupported adapter operations structurally"
+  "reports unsupported store operations structurally"
   (let ((condition nil)
         (store (make-instance 'unsupported-store)))
     (handler-case (event-store-read store "stream-1")
@@ -432,6 +432,20 @@
      (event-store-read-snapshot store "snapshot-stream" :version 0)
      :to-be
      nil)
+    (event-store-save-snapshot
+     store
+     (make-event-snapshot
+      :stream-id
+      "snapshot-stream"
+      :version
+      0
+      :state
+      :initial))
+    (expect
+     (event-snapshot-state
+      (event-store-read-snapshot store "snapshot-stream" :version 0))
+     :to-be
+     :initial)
     (signals
      invalid-snapshot
      (event-store-save-snapshot

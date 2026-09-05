@@ -6,7 +6,7 @@
 (describe
  "subscription lease contracts"
  (it
-  "validates lease values and abstract adapter boundaries"
+  "validates lease values and store boundaries"
   (let ((lease
           (make-subscription-lease
            :consumer-id "consumer"

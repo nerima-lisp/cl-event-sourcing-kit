@@ -47,7 +47,7 @@ policy.
 The checkpoint is advanced only after each handler call succeeds. Persist it
 through the durable runner when a restartable reference runtime is suitable.
 
-## Observe an adapter
+## Observe a backend
 
 Wrap a store with `make-observed-event-store` to attach before/after/error
 callbacks around protocol operations. This is an observation boundary, not a

@@ -24,6 +24,14 @@
                  (write-to-string record :readably t))))
            records)))
 
+(defun write-durable-edge-readable-log-with-tail (path records tail)
+  (with-open-file (stream path :direction :output :if-exists :supersede)
+    (dolist (record records)
+      (with-standard-io-syntax
+        (let ((*print-pretty* nil))
+          (write-line (write-to-string record :readably t) stream))))
+    (write-string tail stream)))
+
 (defun edge-event-with-schema (event schema-version &key payload stream-id)
   (make-domain-event
    :id (domain-event-id event)
@@ -362,6 +370,13 @@
        :event-store (make-instance 'unsupported-store)
        :checkpoint-store checkpoint-store
        :checkpoint-key "edge-projection"))
+    (signals type-error
+      (make-durable-projection-runner
+       :projection projection
+       :event-store event-store
+       :checkpoint-store checkpoint-store
+       :checkpoint-key "edge-projection"
+       :state-copy 1))
     (signals error
       (make-durable-projection-runner
        :projection projection
@@ -1015,10 +1030,18 @@
             nil)
     (signals type-error
       (cl-event-sourcing-kit::%default-deserialize-value 1 serializer))
-    (signals event-serialization-error
+    ;; #1=/#1# datum-label syntax is rejected by the pre-read dispatch
+    ;; scan -- the same guard-clause boundary as the STRINGP check above,
+    ;; not the post-read safety walk -- so it signals a plain ERROR rather
+    ;; than EVENT-SERIALIZATION-ERROR.  Without this rejection, a payload
+    ;; built from shared (not just circular) datum-label references costs
+    ;; exponential time to validate; see %unsafe-reader-dispatch-p.
+    (signals error
       (cl-event-sourcing-kit::%default-deserialize-value
        "#1=(a . #1#)"
        serializer))
+    (signals event-serialization-error
+      (deserialize-value "#1=(a . #1#)" :serializer serializer))
     (signals event-serialization-error
       (deserialize-value 1))
     (signals event-serialization-error
@@ -1086,6 +1109,79 @@
           (lambda (stream)
             (declare (ignore stream))
             (error "sync failed"))))
+       (expect (cl-event-sourcing-kit::%truncate-condition-payload "short")
+               :to-equal
+               "short")
+       (let ((truncated
+               (cl-event-sourcing-kit::%truncate-condition-payload
+                (make-string 5000 :initial-element #\x))))
+         (expect (< (length truncated) 5000) :to-be-truthy)
+         (expect (search "truncated" truncated) :to-be-truthy))
+       ;; A value that clears the pre-read reader-dispatch scan (no #
+       ;; syntax at all) but exceeds the safety walk's depth limit still
+       ;; reaches the post-read rejection path, distinct from the datum-
+       ;; label case rejected earlier by the pre-read scan.
+       (signals event-serialization-error
+         (cl-event-sourcing-kit::%default-deserialize-value
+          (with-output-to-string (s)
+            (dotimes (i 70) (write-string "(1 . " s))
+            (write-string "1" s)
+            (dotimes (i 70) (write-string ")" s)))
+          serializer))
+       (call-with-durable-test-path
+        "serialization-read-bound"
+        (lambda (bounded-path)
+          (write-durable-edge-lines
+           bounded-path
+           (list (make-string 100 :initial-element #\x)))
+          (signals event-serialization-error
+            (cl-event-sourcing-kit::%read-serialized-file
+             bounded-path
+             (make-event-serializer :max-bytes 10)))))
+       ;; Exclusive temp-file creation retries past a name that already
+       ;; exists (a live risk since GENSYM resets per process) instead of
+       ;; silently overwriting it.
+       (let* ((counter cl:*gensym-counter*)
+              (predicted
+                (let ((cl:*gensym-counter* counter))
+                  (cl-event-sourcing-kit::%durable-temporary-pathname path))))
+         (unwind-protect
+              (progn
+                (write-durable-edge-lines predicted (list "(:pre-existing t)"))
+                (let ((cl:*gensym-counter* counter))
+                  (expect
+                   (cl-event-sourcing-kit::%write-serialized-file
+                    path
+                    '(:after-retry t)
+                    nil)
+                   :to-equal
+                   '(:after-retry t)))
+                (expect (cl-event-sourcing-kit::%read-serialized-file path nil)
+                        :to-equal
+                        '(:after-retry t))
+                (expect (probe-file predicted) :to-be-truthy))
+           (when (probe-file predicted) (delete-file predicted))))
+       ;; Exhausting every retry attempt (every candidate name already
+       ;; taken) is a structured failure, not an infinite loop.
+       (let ((counter cl:*gensym-counter*)
+             (blockers nil))
+         (unwind-protect
+              (progn
+                (let ((cl:*gensym-counter* counter))
+                  (dotimes (i 8)
+                    (let ((blocker
+                            (cl-event-sourcing-kit::%durable-temporary-pathname
+                             path)))
+                      (push blocker blockers)
+                      (write-durable-edge-lines blocker (list "(:blocked t)")))))
+                (let ((cl:*gensym-counter* counter))
+                  (signals event-serialization-error
+                    (cl-event-sourcing-kit::%write-serialized-file
+                     path
+                     '(:never t)
+                     nil))))
+           (dolist (blocker blockers)
+             (when (probe-file blocker) (delete-file blocker)))))
        (let* ((base (host-kit:temporary-directory))
               (target-name
                 (format nil "cl-event-sourcing-kit-~A"
@@ -1093,10 +1189,10 @@
               (target (merge-pathnames target-name base))
               (directory-path
                 (merge-pathnames (format nil "~A/" target-name) base)))
-         (unwind-protect
-              (progn
-                (ensure-directories-exist
-                 (merge-pathnames "marker" directory-path))
+       (unwind-protect
+            (progn
+              (ensure-directories-exist
+               (merge-pathnames "marker" directory-path))
                 (let* ((counter cl:*gensym-counter*)
                        (temporary
                          (let ((cl:*gensym-counter* counter))
@@ -1110,6 +1206,84 @@
                        nil)))
                   (expect (probe-file temporary) :to-be nil)))
            (uiop:delete-directory-tree directory-path :validate t))))))))
+
+ (it "removes a failed replacement journal"
+   (call-with-durable-test-path
+    "serialization-log-replace-cleanup"
+    (lambda (path)
+      (let ((store
+              (make-file-event-store
+               :path path
+               :serializer
+               (make-event-serializer
+                :encode
+                (lambda (value)
+                  (when (equal value '(:bad))
+                    (error "replacement serialization failure"))
+                  (with-standard-io-syntax
+                    (let ((*print-pretty* nil))
+                      (write-to-string value :readably t))))))))
+        (unwind-protect
+               (let* ((counter cl:*gensym-counter*)
+                      (temporary
+                        (let ((cl:*gensym-counter* counter))
+                          (cl-event-sourcing-kit::%durable-temporary-pathname
+                           path))))
+               (let ((cl:*gensym-counter* counter))
+                 (let ((caught nil))
+                   (handler-case
+                       (cl-event-sourcing-kit::%replace-file-log-records
+                        store
+                        (list '(:ok) '(:bad)))
+                     (error () (setf caught t)))
+                   (expect caught :to-be t)))
+               (expect (probe-file temporary) :to-be nil))
+          (close-file-event-store store))))))
+
+ (it "removes a replacement journal when renaming fails"
+   (let* ((base (host-kit:temporary-directory))
+          (target-name
+            (format nil "cl-event-sourcing-kit-~A"
+                    (gensym "RENAME-REPLACE-DIRECTORY-")))
+          (target (merge-pathnames target-name base))
+          (directory-path
+            (merge-pathnames (format nil "~A/" target-name) base))
+          (store
+            (make-instance
+             'cl-event-sourcing-kit::file-event-store
+             :path target
+             :serializer
+             (make-event-serializer
+              :encode
+              (lambda (value)
+                (with-standard-io-syntax
+                  (let ((*print-pretty* nil))
+                    (write-to-string value :readably t)))))
+             :delegate nil
+             :stream nil
+             :sync #'finish-output
+             :lock nil
+             :global-position-start 0
+             :next-transaction-id 0)))
+     (unwind-protect
+          (progn
+            (ensure-directories-exist
+             (merge-pathnames "marker" directory-path))
+            (let* ((counter cl:*gensym-counter*)
+                   (temporary
+                     (let ((cl:*gensym-counter* counter))
+                       (cl-event-sourcing-kit::%durable-temporary-pathname
+                        target))))
+              (let ((cl:*gensym-counter* counter))
+                (let ((caught nil))
+                  (handler-case
+                      (cl-event-sourcing-kit::%replace-file-log-records
+                       store
+                       (list '(:ready)))
+                    (error () (setf caught t)))
+                  (expect caught :to-be t)))
+              (expect (probe-file temporary) :to-be nil)))
+       (uiop:delete-directory-tree directory-path :validate t))))
 
 (describe
  "file event store edge contracts"
@@ -1258,6 +1432,27 @@
                  (make-file-event-store :path path))))))
      (expect-corruption "file-invalid-record"
                         (list "not-a-plist"))
+     (expect-corruption "file-invalid-configuration"
+                        (list (list :configuration
+                                    :global-position-start -1)))
+     (expect-corruption "file-malformed-configuration"
+                        (list (list :configuration
+                                    :global-position-start)))
+     (expect-corruption "file-invalid-configuration-type"
+                        (list (list :configuration
+                                    :global-position-start
+                                    "not-an-integer")))
+     (expect-corruption "file-invalid-configuration-key"
+                        (list (list :configuration
+                                    :global-position-start
+                                    0
+                                    'cl-user::not-a-keyword
+                                    1)))
+     (expect-corruption "file-duplicate-configuration"
+                        (list (list :configuration
+                                    :global-position-start 0)
+                              (list :configuration
+                                    :global-position-start 0)))
      (expect-corruption "file-invalid-record-head"
                         (list (list 'cl-user::record :transaction-id 1)))
      (expect-corruption "file-invalid-record-tail"
@@ -1404,6 +1599,65 @@
                  (lambda ()
                    (error "application failure"))))
            (close-file-event-store store))))))
+  (it "swallows a failed standalone abort append"
+    (call-with-durable-test-path
+     "file-standalone-abort-log-failure"
+     (lambda (path)
+       (let* ((fail-p nil)
+             (store
+               (make-file-event-store
+                :path path
+                :sync (lambda (stream)
+                        (if fail-p
+                            (error "standalone abort log sync failure")
+                            (finish-output stream))))))
+         (unwind-protect
+              (progn
+                (setf fail-p t)
+                (expect
+                 (cl-event-sourcing-kit::%file-log-abort store 99)
+                 :to-be
+                 nil))
+           (setf fail-p nil)
+           (close-file-event-store store))))))
+  (it "repairs a legacy journal with an incomplete tail"
+    (call-with-durable-test-path
+     "file-legacy-incomplete-tail"
+     (lambda (path)
+       (let ((event (make-test-event
+                     "file-legacy-tail-event"
+                     "file-legacy-tail-stream"
+                     :payload)))
+         (write-durable-edge-readable-log-with-tail
+          path
+          (list
+           (list :prepare
+                 :transaction-id 1
+                 :operation
+                 (list :append
+                       :stream-id "file-legacy-tail-stream"
+                       :events
+                       (list (cl-event-sourcing-kit::%domain-event-wire
+                              event))
+                       :expected-version :no-stream))
+           (list :commit :transaction-id 1))
+          "(:incomplete")
+         (let ((store (make-file-event-store :path path)))
+           (unwind-protect
+                (expect (mapcar #'domain-event-id
+                                (event-store-read
+                                 store
+                                 "file-legacy-tail-stream"))
+                        :to-equal
+                        '("file-legacy-tail-event"))
+             (close-file-event-store store)))
+         (let ((store (make-file-event-store :path path)))
+           (unwind-protect
+                (expect (mapcar #'domain-event-id
+                                (event-store-read-all store))
+                        :to-equal
+                        '("file-legacy-tail-event"))
+             (close-file-event-store store)))))))
   (it "replays committed, uncommitted, snapshot, batch, delete, and prune operations"
     (call-with-durable-test-path
      "file-recovery-operations"
@@ -1534,8 +1788,10 @@
                 :serializer
                 (make-event-serializer
                  :encode (lambda (value)
-                           (declare (ignore value))
-                           (format nil "line-one~%line-two"))))))
+                           (if (and (consp value)
+                                    (eq (first value) :configuration))
+                               (format nil "~S" value)
+                               (format nil "line-one~%line-two")))))))
          (unwind-protect
               (signals event-serialization-error
                 (event-store-append
@@ -1554,11 +1810,13 @@
                 :serializer
                 (make-event-serializer
                  :encode (lambda (value)
-                           (declare (ignore value))
-                           (concatenate 'string
-                                        "line-one"
-                                        (string #\Return)
-                                        "line-two"))))))
+                           (if (and (consp value)
+                                    (eq (first value) :configuration))
+                               (format nil "~S" value)
+                               (concatenate 'string
+                                            "line-one"
+                                            (string #\Return)
+                                            "line-two")))))))
          (unwind-protect
               (signals event-serialization-error
                 (event-store-append
@@ -1607,3 +1865,14 @@
                         :to-be
                         1))
            (close-file-event-store store)))))))
+
+(describe
+ "durable log line byte-limit contracts"
+ (it "rejects a single log line that exceeds the configured byte limit"
+   (call-with-durable-test-path
+    "file-log-line-bound"
+    (lambda (path)
+      (write-durable-edge-lines path (list (make-string 200 :initial-element #\x)))
+      (signals event-serialization-error
+        (make-file-event-store :path path
+                               :serializer (make-event-serializer :max-bytes 10)))))))

@@ -1,4 +1,4 @@
-;;;; Versioned upcasters and operational wrappers
+;;;; Versioned upcasters and operational integration
 
 (defun make-upcaster-registry (&key table)
   (let ((table (or table (make-hash-table :test #'equal))))
@@ -13,26 +13,6 @@
   (unless (and (integerp version) (<= 0 version))
     (error 'event-sourcing-error :message description))
   version)
-
-(defun %upcaster-envelope-preserved-p (before after)
-  (and (%safe-equal-p (domain-event-id before) (domain-event-id after))
-       (%safe-equal-p (domain-event-type before) (domain-event-type after))
-       (%safe-equal-p (domain-event-stream-id before)
-                      (domain-event-stream-id after))
-       (%safe-equal-p (domain-event-aggregate-id before)
-                      (domain-event-aggregate-id after))
-       (%safe-equal-p (domain-event-metadata before)
-                      (domain-event-metadata after))
-       (%safe-equal-p (domain-event-timestamp before)
-                      (domain-event-timestamp after))
-       (%safe-equal-p (domain-event-version before)
-                      (domain-event-version after))
-       (%safe-equal-p (domain-event-correlation-id before)
-                      (domain-event-correlation-id after))
-       (%safe-equal-p (domain-event-causation-id before)
-                      (domain-event-causation-id after))
-       (%safe-equal-p (domain-event-global-position before)
-                      (domain-event-global-position after))))
 
 (defmethod register-upcaster ((registry upcaster-registry)
                               event-type

@@ -85,7 +85,7 @@
             (error cause)))))))
 
 (defmethod event-store-append-with-outbox
-    ((store event-store) stream-id events messages &key expected-version)
+    ((store t) stream-id events messages &key expected-version)
   (declare (ignore stream-id events messages expected-version))
   (error 'event-store-operation-not-supported
          :operation 'event-store-append-with-outbox

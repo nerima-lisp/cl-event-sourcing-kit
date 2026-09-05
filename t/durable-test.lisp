@@ -104,7 +104,46 @@
                 (expect (event-snapshot-state snapshot)
                         :to-equal
                         '(:state 7))))
-         (close-file-event-store recovered)))))))
+     (close-file-event-store recovered)))))))
+
+ (it
+  "persists and validates a non-zero global position origin"
+  (call-with-durable-test-path
+   "event-log-global-origin"
+   (lambda (path)
+     (let ((store (make-file-event-store
+                   :path path
+                   :global-position-start 40)))
+       (unwind-protect
+            (progn
+              (event-store-append
+               store
+               "origin-stream"
+               (list (make-test-event
+                      "origin-event-1"
+                      "origin-stream"
+                      :value))
+               :expected-version
+               :no-stream)
+              (expect (event-store-current-global-position store)
+                      :to-be
+                      41))
+         (close-file-event-store store)))
+     (let ((recovered (make-file-event-store :path path)))
+       (unwind-protect
+            (progn
+              (expect (event-store-current-global-position recovered)
+                      :to-be
+                      41)
+              (expect (domain-event-global-position
+                       (first (event-store-read-all recovered)))
+                      :to-be
+                      41))
+         (close-file-event-store recovered)))
+     (signals event-sourcing-error
+       (make-file-event-store
+        :path path
+        :global-position-start 41)))))
 
  (it
   "survives a truncated final record and preserves the retention boundary"
@@ -154,7 +193,70 @@
                       3)
               (expect (event-store-retention-floor recovered) :to-be 2)
               (signals event-store-retention-gap
-                (event-store-read-all recovered :after-global-position 0)))
+                (event-store-read-all recovered :after-global-position 0))
+              (event-store-append
+               recovered
+               "retention-stream"
+               (list (make-test-event
+                      "retention-event-4"
+                      "retention-stream"
+                      3))
+               :expected-version
+               3)
+              (expect (event-store-current-global-position recovered)
+                      :to-be
+                      4))
+         (close-file-event-store recovered)))
+     (let ((recovered-again (make-file-event-store :path path)))
+       (unwind-protect
+         (expect (mapcar #'domain-event-id
+                            (event-store-read-all
+                             recovered-again
+                             :after-global-position
+                             2))
+                    :to-equal
+                    '("retention-event-3" "retention-event-4"))
+         (close-file-event-store recovered-again))))))
+
+ (it
+  "replaces an incomplete tail before reusing an open journal"
+  (call-with-durable-test-path
+   "event-log-open-tail"
+   (lambda (path)
+     (let ((store (make-file-event-store :path path)))
+       (unwind-protect
+            (progn
+              (event-store-append
+               store
+               "open-tail-stream"
+               (list (make-test-event
+                      "open-tail-event-1"
+                      "open-tail-stream"
+                      :first))
+               :expected-version
+               :no-stream)
+              (with-open-file (stream path :direction :output :if-exists :append)
+                (write-string "(:incomplete" stream))
+              (recover-file-event-store store)
+              (event-store-append
+               store
+               "open-tail-stream"
+               (list (make-test-event
+                      "open-tail-event-2"
+                      "open-tail-stream"
+                      :second))
+               :expected-version
+               1)
+              (expect (event-store-current-global-position store)
+                      :to-be
+                      2))
+         (close-file-event-store store)))
+     (let ((recovered (make-file-event-store :path path)))
+       (unwind-protect
+            (expect (mapcar #'domain-event-id
+                            (event-store-read-all recovered))
+                    :to-equal
+                    '("open-tail-event-1" "open-tail-event-2"))
          (close-file-event-store recovered))))))
 
  (it
@@ -570,6 +672,50 @@
       (let ((record (projection-checkpoint-load checkpoints "failing")))
         (expect (projection-checkpoint-record-state record) :to-be 0)
         (expect (projection-checkpoint-record-position record) :to-be 0)))))
+
+ (it
+  "restores mutable projection state with a state copier"
+  (let ((event-store (make-in-memory-event-store :global-position-start 0)))
+    (dotimes (index 2)
+      (event-store-append
+       event-store
+       "mutable-failure-stream"
+       (list
+        (make-test-event
+         (format nil "mutable-failure-event-~D" (1+ index))
+         "mutable-failure-stream"
+         (1+ index)))
+       :expected-version
+       (if (zerop index) :no-stream index)))
+    (let* ((checkpoints (make-in-memory-projection-checkpoint-store))
+           (projection
+             (make-projection
+              :initial-state (list 0)
+              :handler (lambda (state event)
+                         (incf (first state)
+                               (domain-event-payload event))
+                         (when (= (domain-event-payload event) 2)
+                           (error "mutable projection failed"))
+                         state)))
+           (runner
+             (make-durable-projection-runner
+              :projection projection
+              :event-store event-store
+              :checkpoint-store checkpoints
+              :checkpoint-key "mutable-failing"
+              :state-copy #'copy-tree)))
+      (multiple-value-bind (state position)
+          (run-projection-once runner :limit 1)
+        (expect state :to-equal '(1))
+        (expect position :to-be 1))
+      (signals projection-failure (run-projection-once runner))
+      (expect (projection-state projection) :to-equal '(1))
+      (let ((record
+              (projection-checkpoint-load checkpoints "mutable-failing")))
+        (expect (projection-checkpoint-record-state record)
+                :to-equal '(1))
+        (expect (projection-checkpoint-record-position record)
+                :to-be 1)))))
   )
 
 (describe
@@ -767,9 +913,17 @@
          :no-stream)
       (event-version-conflict () nil))
     (expect (member :append errors) :to-be-truthy)
-    (let ((attempts 0))
+    (let* ((attempts 0)
+           (policy
+             (resilience-kit:make-retry-policy
+              :max-attempts 3
+              :retry-safe-p t
+              :condition-classifier
+              (lambda (condition attempt)
+                (declare (ignore condition attempt))
+                t))))
       (expect
-       (with-retries (:attempts 3 :delay 0 :backoff 1)
+       (resilience-kit:with-retry (policy)
          (incf attempts)
          (if (< attempts 3)
              (error "transient")
@@ -777,7 +931,15 @@
        :to-be
        :ok)
       (expect attempts :to-be 3))
-    (signals error
-      (with-retries (:attempts 2 :delay 0)
-        (error "permanent")))))
+    (let ((policy
+            (resilience-kit:make-retry-policy
+             :max-attempts 2
+             :retry-safe-p t
+             :condition-classifier
+             (lambda (condition attempt)
+               (declare (ignore condition attempt))
+               t))))
+      (signals error
+        (resilience-kit:with-retry (policy)
+          (error "permanent"))))))
  )

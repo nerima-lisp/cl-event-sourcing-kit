@@ -1,7 +1,7 @@
 # API reference
 
 The public API is grouped by ASDF system. The complete export list is kept in
-`src/package.lisp`; the groups below are the stable concepts an adapter or
+`src/package.lisp`; the groups below are the stable concepts a backend or
 application should depend on.
 
 ## Core system
@@ -20,7 +20,7 @@ stream, operation, or checkpoint values for programmatic handling.
 
 ### Store protocol
 
-`event-store` and these generic operations define the adapter boundary:
+These generic operations define the backend protocol directly:
 
 ```text
 event-store-append
@@ -52,13 +52,23 @@ value objects.
 and `commit-events` provide pure reconstruction and a small command-side
 session.
 
+### CPS entry points
+
+The core also exports synchronous continuation-shaped entry points:
+`event-store-append/cc`, `event-store-append-batch/cc`, `event-store-read/cc`,
+`replay-events/cc`, `commit-events/cc`, `rebuild-projection/cc`, and
+`advance-projection/cc`. Each accepts success and error continuations while
+preserving the validation and transaction semantics of its synchronous
+counterpart. `define-cps-operation` is the exported macro for defining an
+operation with the same boundary.
+
 ## In-memory system
 
 `make-event-store` creates the reference in-memory implementation. It supports
 stream and global-feed reads, optimistic expected versions, all-or-nothing
 append batches, duplicate-ID idempotency, snapshots, and global positions.
 
-Use the in-memory system to test adapter-independent application behavior; do
+Use the in-memory system to test backend-independent application behavior; do
 not infer production durability from it.
 
 ## Projection system
@@ -84,8 +94,9 @@ The durable exports include:
   `event-store-append-with-outbox`;
 - projection checkpoint stores, `make-durable-projection-runner`, and
   `run-projection-once`;
-- `upcaster-registry`, `register-upcaster`, `make-observed-event-store`, and
-  `with-retries`.
+- `upcaster-registry`, `register-upcaster`, and `make-observed-event-store`;
+  retry policy is supplied directly by `cl-resilience-kit` via
+  `resilience-kit:with-retry`.
 
 Consult [Durable runtime](../guide/durable-runtime.md) for guarantees and
 limitations rather than treating these reference implementations as a
@@ -95,7 +106,7 @@ distributed service.
 
 | System | Depends on | Main additions |
 | --- | --- | --- |
-| `cl-event-sourcing-kit` | `cl-boundary-kit` | Core protocol, replay, staging, conditions, CPS. |
+| `cl-event-sourcing-kit` | `cl-boundary-kit`, `cl-weave` | Core protocol, replay, staging, conditions, CPS. |
 | `cl-event-sourcing-kit/in-memory` | Core, `cl-concurrent-kit` | Reference event store. |
 | `cl-event-sourcing-kit/projection` | Core | Projection and rebuild. |
-| `cl-event-sourcing-kit/durable` | In-memory, projection, `cl-concurrent-kit` | File persistence, delivery, outbox, checkpoints, evolution. |
+| `cl-event-sourcing-kit/durable` | In-memory, projection, `cl-concurrent-kit`, `cl-resilience-kit` | File persistence, delivery, outbox, checkpoints, evolution. |

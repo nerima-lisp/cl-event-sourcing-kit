@@ -12,7 +12,7 @@
     :initform 64
     :reader %event-serializer-max-depth)))
 
-(defclass file-event-store (event-store)
+(defclass file-event-store ()
   ((path :initarg :path :reader file-event-store-path)
    (serializer :initarg :serializer :reader %file-event-store-serializer)
    (delegate :initarg :delegate :accessor %file-event-store-delegate)
@@ -21,7 +21,11 @@
    (lock :initarg :lock :reader %file-event-store-lock)
    (global-position-start
     :initarg :global-position-start
-    :reader %file-event-store-global-position-start)
+    :accessor %file-event-store-global-position-start)
+   (global-position-start-supplied-p
+    :initarg :global-position-start-supplied-p
+    :initform nil
+    :reader %file-event-store-global-position-start-supplied-p)
    (next-transaction-id
     :initarg :next-transaction-id
     :accessor %file-event-store-next-transaction-id)))
@@ -39,12 +43,12 @@
    (sync :initarg :sync :reader %file-offset-sync)
    (lock :initarg :lock :reader %file-offset-lock)))
 
-(defgeneric subscription-offset (store consumer-id))
-(defgeneric save-subscription-offset (store consumer-id global-position))
+(define-store-operation subscription-offset (store consumer-id))
+(define-store-operation save-subscription-offset (store consumer-id global-position))
 
 ;; A lease is deliberately separate from an offset.  An offset records
 ;; progress; a lease records the current owner and its fencing token.  A
-;; database or coordination-service adapter can therefore implement the
+;; database or coordination-service backend can therefore implement the
 ;; same protocol with a compare-and-set/transactional primitive.
 (defstruct (subscription-lease
             (:constructor %make-subscription-lease
@@ -65,13 +69,13 @@
                 :reader %in-memory-subscription-lease-next-tokens)
    (lock :initarg :lock :reader %in-memory-subscription-lease-lock)))
 
-(defgeneric subscription-lease-acquire
+(define-store-operation subscription-lease-acquire
     (store consumer-id owner-id &key now lease-seconds))
-(defgeneric subscription-lease-renew
+(define-store-operation subscription-lease-renew
     (store lease &key now lease-seconds))
-(defgeneric subscription-lease-release (store lease))
-(defgeneric subscription-lease-valid-p (store lease &key now))
-(defgeneric subscription-lease-store-capabilities (store))
+(define-store-operation subscription-lease-release (store lease))
+(define-store-operation subscription-lease-valid-p (store lease &key now))
+(define-store-operation subscription-lease-store-capabilities (store))
 
 (defstruct (subscription-delivery
             (:constructor %make-subscription-delivery
@@ -96,9 +100,9 @@
                   :reader subscription-lease-seconds)
    (lease :initarg :lease :initform nil :accessor %subscription-lease)))
 
-(defgeneric subscription-poll (subscription))
-(defgeneric subscription-ack (subscription global-position))
-(defgeneric deliver-subscription (subscription handler))
+(define-store-operation subscription-poll (subscription))
+(define-store-operation subscription-ack (subscription global-position))
+(define-store-operation deliver-subscription (subscription handler))
 
 (defstruct (outbox-message
             (:constructor %make-outbox-message
@@ -134,16 +138,16 @@
    (sync :initarg :sync :reader %file-outbox-sync)
    (lock :initarg :lock :reader %file-outbox-lock)))
 
-(defgeneric outbox-append (store message))
-(defgeneric outbox-read (store message-id))
-(defgeneric outbox-read-all (store &key status limit))
-(defgeneric outbox-read-pending (store &key now limit))
-(defgeneric outbox-claim (store &key now limit lease-seconds))
-(defgeneric outbox-ack (store message-id &key claim-token))
-(defgeneric outbox-fail (store message-id
+(define-store-operation outbox-append (store message))
+(define-store-operation outbox-read (store message-id))
+(define-store-operation outbox-read-all (store &key status limit))
+(define-store-operation outbox-read-pending (store &key now limit))
+(define-store-operation outbox-claim (store &key now limit lease-seconds))
+(define-store-operation outbox-ack (store message-id &key claim-token))
+(define-store-operation outbox-fail (store message-id
                          &key now backoff-seconds claim-token failure max-attempts))
-(defgeneric outbox-requeue (store message-id &key available-at))
-(defgeneric outbox-dispatch (store handler
+(define-store-operation outbox-requeue (store message-id &key available-at))
+(define-store-operation outbox-dispatch (store handler
                              &key now limit lease-seconds backoff-seconds
                              max-attempts))
 
@@ -152,7 +156,7 @@
    (outbox-store :initarg :outbox-store :reader %event-outbox-outbox-store)
    (lock :initarg :lock :reader %event-outbox-lock)))
 
-(defgeneric event-store-append-with-outbox
+(define-store-operation event-store-append-with-outbox
     (store stream-id events messages &key expected-version))
 
 (defstruct (projection-checkpoint-record
@@ -176,9 +180,9 @@
    (sync :initarg :sync :reader %file-checkpoint-sync)
    (lock :initarg :lock :reader %file-checkpoint-lock)))
 
-(defgeneric projection-checkpoint-load (store key))
-(defgeneric projection-checkpoint-save (store key record))
-(defgeneric projection-checkpoint-delete (store key))
+(define-store-operation projection-checkpoint-load (store key))
+(define-store-operation projection-checkpoint-save (store key record))
+(define-store-operation projection-checkpoint-delete (store key))
 
 (defclass durable-projection-runner ()
   ((projection :initarg :projection :reader durable-projection-runner-projection)
@@ -187,18 +191,19 @@
     :initarg :checkpoint-store
     :reader durable-projection-runner-checkpoint-store)
    (checkpoint-key :initarg :checkpoint-key :reader %durable-runner-key)
+   (state-copy :initarg :state-copy :initform nil :reader %durable-runner-state-copy)
    (lock :initarg :lock :reader %durable-runner-lock)))
 
-(defgeneric run-projection-once (runner &key limit))
+(define-store-operation run-projection-once (runner &key limit))
 
 (defclass upcaster-registry ()
   ((table :initarg :table :reader %upcaster-table)))
 
-(defgeneric register-upcaster
+(define-store-operation register-upcaster
     (registry event-type from-version to-version function))
-(defgeneric upcaster-registry-function (registry &key event-type))
+(define-store-operation upcaster-registry-function (registry &key event-type))
 
-(defclass observed-event-store (event-store)
+(defclass observed-event-store ()
   ((delegate :initarg :delegate :reader %observed-event-store-delegate)
    (before :initarg :before :reader %observed-event-store-before)
    (after :initarg :after :reader %observed-event-store-after)

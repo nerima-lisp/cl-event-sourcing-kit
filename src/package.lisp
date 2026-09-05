@@ -3,7 +3,7 @@
   (:documentation
    "Domain-independent event sourcing protocol.
 
-Event payloads and metadata are opaque caller-owned values.  Adapters own
+Event payloads and metadata are opaque caller-owned values.  backend implementations own
 serialization, transactions, durability, and recovery; this package exposes
 the protocol and its reference semantics.")
   (:export
@@ -67,7 +67,6 @@ the protocol and its reference semantics.")
    #:projection-failure-checkpoint
 
    ;; Event store protocol.
-   #:event-store
    #:event-store-append
    #:event-store-read
    #:event-store-read-all
@@ -128,6 +127,8 @@ the protocol and its reference semantics.")
    #:commit-events
 
    ;; Static DSL helpers.
+   #:define-store-operation
+   #:define-cps-operation
    #:define-event-reducer
    #:with-event-staging
 
@@ -149,7 +150,7 @@ the protocol and its reference semantics.")
    #:make-in-memory-event-store
    #:make-event-store
 
-   ;; Optional durable adapter and application-runtime facilities.
+   ;; Optional durable backend and application-runtime facilities.
    #:event-serialization-error
    #:event-serialization-error-value
    #:event-serialization-error-cause
@@ -296,7 +297,6 @@ the protocol and its reference semantics.")
    #:observed-event-store
    #:observed-event-store-p
    #:make-observed-event-store
-   #:with-retries
    #:event-store-prune
    #:event-store-retention-supported-p
    #:event-store-retention-floor

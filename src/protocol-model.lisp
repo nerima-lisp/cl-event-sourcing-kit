@@ -1,15 +1,5 @@
 (in-package #:cl-event-sourcing-kit)
 
-(defclass event-store ()
-  ()
-  (:documentation
-   "Abstract event-store protocol.
-
-An adapter subclasses this class and implements the generic operations.  The
-   class is intentionally not an adapter wrapper or factory: storage ownership,
-   serialization, transactions, durability, and recovery remain with the
-   adapter."))
-
 (defclass event-snapshot ()
   ((stream-id :initarg :stream-id :reader event-snapshot-stream-id)
    (version :initarg :version :reader event-snapshot-version)
@@ -33,54 +23,63 @@ An adapter subclasses this class and implements the generic operations.  The
   events
   version)
 
-(defgeneric event-store-append (store stream-id events &key expected-version))
+(defmacro define-store-operation (name lambda-list &optional documentation)
+  "Declare one store operation from its data-level protocol specification."
+  `(defgeneric ,name ,lambda-list
+     ,@(when documentation `((:documentation ,documentation)))))
 
-(defgeneric event-store-read (store stream-id &key from-version to-version))
+(define-store-operation event-store-append
+    (store stream-id events &key expected-version))
 
-(defgeneric event-store-read-all (store &key after-global-position limit))
+(define-store-operation event-store-read
+    (store stream-id &key from-version to-version))
 
-(defgeneric event-store-current-version (store stream-id))
+(define-store-operation event-store-read-all
+    (store &key after-global-position limit))
 
-(defgeneric event-store-current-global-position (store))
+(define-store-operation event-store-current-version (store stream-id))
 
-(defgeneric event-store-stream-exists-p (store stream-id))
+(define-store-operation event-store-current-global-position (store))
 
-(defgeneric event-store-global-position-supported-p (store))
+(define-store-operation event-store-stream-exists-p (store stream-id))
 
-(defgeneric event-store-event-equivalent-p (store
-                                            existing-event
-                                            requested-event))
+(define-store-operation event-store-global-position-supported-p (store))
 
-(defgeneric event-store-append-batch (store requests))
+(define-store-operation event-store-event-equivalent-p
+    (store existing-event requested-event))
 
-(defgeneric event-store-save-snapshot (store snapshot))
+(define-store-operation event-store-append-batch (store requests))
 
-(defgeneric event-store-read-snapshot (store stream-id &key version))
+(define-store-operation event-store-save-snapshot (store snapshot))
 
-(defgeneric event-store-delete-snapshot (store stream-id))
+(define-store-operation event-store-read-snapshot
+    (store stream-id &key version))
 
-(defgeneric event-store-snapshots-supported-p (store))
+(define-store-operation event-store-delete-snapshot (store stream-id))
 
-(defgeneric event-store-prune (store &key before-global-position))
+(define-store-operation event-store-snapshots-supported-p (store))
 
-(defgeneric event-store-retention-supported-p (store))
+(define-store-operation event-store-prune
+    (store &key before-global-position))
 
-(defgeneric event-store-retention-floor (store))
+(define-store-operation event-store-retention-supported-p (store))
 
-(defgeneric event-store-capabilities (store)
-  (:documentation
-   "Return the stable capability keywords provided by STORE.
+(define-store-operation event-store-retention-floor (store))
 
-Capability discovery is deliberately additive: adapters may expose more
+(define-store-operation event-store-capabilities
+    (store)
+    "Return the stable capability keywords provided by STORE.
+
+Capability discovery is deliberately additive: backend implementations may expose more
 keywords, while callers should only require the capabilities that their
 operation needs.  Standard keywords include :APPEND, :READ, :READ-ALL,
 :OPTIMISTIC-CONCURRENCY, :IDEMPOTENT-EVENT-IDS, :BATCH-APPEND,
 :GLOBAL-POSITION, :SNAPSHOTS, :RETENTION, :DURABLE, :CRASH-RECOVERY,
 :PROCESS-LOCAL-LOCK, :ATOMIC-OUTBOX, :CROSS-PROCESS-LOCK,
 :CONSUMER-LEASES, :FENCING, :FSYNC, :REPLICATION, and :ENCRYPTION.  The
-extended keywords are adapter-defined deployment guarantees; the core only
-uses them when a caller explicitly requires them."))
+extended keywords are backend-defined deployment guarantees; the core only
+uses them when a caller explicitly requires them.")
 
-(defgeneric event-store-supports-p (store capability)
-  (:documentation
-   "Return true when STORE advertises CAPABILITY."))
+(define-store-operation event-store-supports-p
+    (store capability)
+    "Return true when STORE advertises CAPABILITY.")

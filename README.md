@@ -36,8 +36,9 @@ Load the optional in-memory system for a small public-API-only example:
                 (cl-event-sourcing-kit:domain-event-payload current-event)))))))
 ```
 
-The result is `(1 42)`. Replace the in-memory store with an adapter that
-implements the same event-store protocol when persistence is required.
+The result is `(1 42)`. A persistent backend implements the same generic
+operations directly; no compatibility adapter or base-store subclass is
+required.
 
 ## Systems
 
@@ -47,12 +48,10 @@ implements the same event-store protocol when persistence is required.
 - `cl-event-sourcing-kit/projection`: projection and rebuild support.
 - `cl-event-sourcing-kit/durable`: safe serialization, recoverable file
   storage, subscriptions, outbox delivery, durable projection checkpoints,
-  upcasters, retention, and operational wrappers.
+  upcasters, retention, and direct `cl-resilience-kit` policies.
 
 The durable system is a portable reference runtime, not a distributed
-database, broker, scheduler, or high-availability deployment. Future database
-adapters and separate CQRS, Saga, audit-log, and messaging systems remain
-outside this repository's core.
+database, broker, scheduler, or high-availability deployment.
 
 ## Development
 
@@ -85,4 +84,5 @@ coverage, benchmark, and documentation commands.
 
 ## License
 
-MIT. See [`LICENSE`](LICENSE).
+MIT. See [`LICENSE`](LICENSE) and the license declaration in
+`cl-event-sourcing-kit.asd`.

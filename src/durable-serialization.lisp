@@ -35,34 +35,48 @@ pathnames, CLOS instances, and foreign pointers require an application codec.
     (setf max-depth 64))
   (unless (and (integerp max-depth) (plusp max-depth))
     (error 'type-error :datum max-depth :expected-type '(integer 1 *)))
-  (labels ((walk (value active depth)
+  (labels ((walk (value active verified depth)
              (cond
                ((or (null value) (characterp value)) t)
                ((and (numberp value) (realp value)) t)
                ((stringp value) t)
                ((symbolp value) (%safe-symbol-package-p value))
                ((consp value)
-                (when (> depth max-depth)
-                  (return-from walk nil))
-                (when (gethash value active)
-                  (return-from walk nil))
-                (setf (gethash value active) t)
-                (unwind-protect
-                     (and (walk (car value) active (1+ depth))
-                          (walk (cdr value) active (1+ depth)))
-                  (remhash value active)))
+                (or (gethash value verified)
+                    (progn
+                      (when (> depth max-depth)
+                        (return-from walk nil))
+                      (when (gethash value active)
+                        (return-from walk nil))
+                      (setf (gethash value active) t)
+                      (unwind-protect
+                           (let ((safe-p
+                                   (and (walk (car value) active verified (1+ depth))
+                                        (walk (cdr value) active verified (1+ depth)))))
+                             (when safe-p (setf (gethash value verified) t))
+                             safe-p)
+                        (remhash value active)))))
                ((vectorp value)
-                (when (> depth max-depth)
-                  (return-from walk nil))
-                (when (gethash value active)
-                  (return-from walk nil))
-                (setf (gethash value active) t)
-                (unwind-protect
-                     (loop for index below (length value)
-                           always (walk (aref value index) active (1+ depth)))
-                  (remhash value active)))
+                (or (gethash value verified)
+                    (progn
+                      (when (> depth max-depth)
+                        (return-from walk nil))
+                      (when (gethash value active)
+                        (return-from walk nil))
+                      (setf (gethash value active) t)
+                      (unwind-protect
+                           (let ((safe-p
+                                   (loop for index below (length value)
+                                         always (walk (aref value index) active verified (1+ depth)))))
+                             (when safe-p (setf (gethash value verified) t))
+                             safe-p)
+                        (remhash value active)))))
                (t nil))))
-    (walk value (make-hash-table :test #'eq) 0)))
+    ;; VERIFIED memoizes conses/vectors already walked successfully so a value
+    ;; built from #n= reader labels -- a DAG with shared, non-circular
+    ;; substructure -- is validated once per node rather than once per
+    ;; reference, which would otherwise cost O(2^depth).
+    (walk value (make-hash-table :test #'eq) (make-hash-table :test #'eq) 0)))
 
 (defun %default-serialize-value (value serializer)
   (unless (%safe-serializable-value-p
@@ -95,13 +109,21 @@ pathnames, CLOS instances, and foreign pointers require an application codec.
           (*print-pretty* nil))
       (write-to-string (portable-copy value) :readably t :circle nil)))))
 
+(defun %ascii-digit-char-p (character)
+  (char<= #\0 character #\9))
+
 (defun %unsafe-reader-dispatch-p (text)
+  ;; A digit after # also rejects #n= / #n# datum labels: without this, the
+  ;; reader can build a DAG with shared, non-circular substructure from a
+  ;; text payload of length O(depth), which costs O(2^depth) to validate
+  ;; unless every reference is memoized once verified.
   (loop for index below (length text)
         thereis (and (char= (char text index) #\#)
                      (< (1+ index) (length text))
                      (let ((next (char text (1+ index))))
-                       (or (find next ".,'" :test #'char=)
-                           (find next "sSpPcCaA" :test #'char=))))))
+                       (or (find next ".,'=#" :test #'char=)
+                           (find next "sSpPcCaA" :test #'char=)
+                           (%ascii-digit-char-p next))))))
 
 (defun %utf-8-octet-length (text)
   (loop for character across text
@@ -136,7 +158,7 @@ pathnames, CLOS instances, and foreign pointers require an application codec.
           value)
       (error (cause)
         (error 'event-serialization-error
-               :value text
+               :value (%truncate-condition-payload text)
                :direction :decode
                :cause cause)))))
 
@@ -157,7 +179,7 @@ pathnames, CLOS instances, and foreign pointers require an application codec.
       (event-serialization-error (condition) (error condition))
       (error (cause)
         (error 'event-serialization-error
-               :value value
+               :value (%truncate-condition-payload value)
                :direction :encode
                :cause cause)))))
 
@@ -178,7 +200,7 @@ pathnames, CLOS instances, and foreign pointers require an application codec.
       (event-serialization-error (condition) (error condition))
       (error (cause)
         (error 'event-serialization-error
-               :value serialized
+               :value (%truncate-condition-payload serialized)
                :direction :decode
                :cause cause)))))
 
@@ -284,46 +306,78 @@ pathnames, CLOS instances, and foreign pointers require an application codec.
    :type (pathname-type path)
    :defaults path))
 
+(defun %open-durable-temporary-file (path)
+  "Exclusively create a fresh temporary file beside PATH and return its
+stream and pathname.
+
+OPEN returns NIL here only when :IF-EXISTS NIL found the name already
+taken -- a live risk since temporary names are seeded from a per-process
+GENSYM counter that resets across processes -- so a NIL stream always means
+retry with a fresh name. Any other OPEN failure (permission, a missing
+parent directory, ...) signals its own FILE-ERROR and escapes this loop
+immediately rather than being retried."
+  (loop repeat 8
+        for temporary = (%durable-temporary-pathname path)
+        for stream = (open temporary
+                           :direction :output
+                           :if-exists nil
+                           :if-does-not-exist :create)
+        when stream return (values stream temporary)
+        finally (error 'event-serialization-error
+                       :value path
+                       :direction :encode
+                       :cause "Exhausted durable temporary file name attempts.")))
+
 (defun %write-serialized-file (path value serializer
                                &optional (sync #'finish-output))
   (let* ((path (%durable-pathname path))
-         (temporary (%durable-temporary-pathname path))
          (serialized (serialize-value value :serializer serializer)))
     (unless (functionp sync)
       (error 'type-error :datum sync :expected-type 'function))
     (when (or (position #\Newline serialized)
               (position #\Return serialized))
       (error 'event-serialization-error
-             :value value
+             :value (%truncate-condition-payload value)
              :direction :encode
              :cause "Auxiliary durable records must be one line."))
-    (unwind-protect
-         (progn
-           (with-open-file (stream temporary
-                                   :direction :output
-                                   :if-exists :supersede
-                                   :if-does-not-exist :create)
+    (multiple-value-bind (stream temporary) (%open-durable-temporary-file path)
+      (unwind-protect
+           (progn
              (write-line serialized stream)
-             (funcall sync stream))
-           ;; RENAME-FILE is the only replacement step.  If the host cannot
-           ;; replace PATH atomically, retain the old value and let the
-           ;; caller observe the failure; deleting it first would turn a
-           ;; recoverable write error into data loss.
-           (rename-file temporary path)
-           value)
-      (when (probe-file temporary)
-        (delete-file temporary)))))
+             (funcall sync stream)
+             (close stream)
+             ;; RENAME-FILE is the only replacement step.  If the host cannot
+             ;; replace PATH atomically, retain the old value and let the
+             ;; caller observe the failure; deleting it first would turn a
+             ;; recoverable write error into data loss.
+             (rename-file temporary path)
+             value)
+        (close stream)
+        (when (probe-file temporary)
+          (delete-file temporary))))))
 
-(defun %read-file-string (path)
+(defun %read-file-string (path &optional max-bytes)
+  "Read PATH as a string, aborting once the accumulated size passes MAX-BYTES
+so a corrupted or adversarial file cannot force unbounded buffering before
+the caller's own size limit is ever consulted."
   (with-open-file (stream path :direction :input)
     (let ((output (make-string-output-stream)))
       (loop for character = (read-char stream nil nil)
             while character
-            do (write-char character output))
+            do (write-char character output)
+               (when (and max-bytes (> (file-position stream) max-bytes))
+                 (error 'event-serialization-error
+                        :value (%truncate-condition-payload
+                                (get-output-stream-string output))
+                        :direction :decode
+                        :cause "Serialized file exceeds the configured byte limit.")))
       (get-output-stream-string output))))
 
 (defun %read-serialized-file (path serializer)
-  (let ((path (pathname path)))
+  (let ((path (pathname path))
+        (serializer (%resolve-event-serializer serializer)))
     (if (probe-file path)
-        (deserialize-value (%read-file-string path) :serializer serializer)
+        (deserialize-value
+         (%read-file-string path (%event-serializer-max-bytes serializer))
+         :serializer serializer)
         nil)))

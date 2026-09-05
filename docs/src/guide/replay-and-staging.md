@@ -22,11 +22,14 @@ the event sequence.
 upcaster receives a stored `domain-event` and returns a domain event in the
 shape expected by the current reducer. The upcaster can be a registry, a
 chain, or an adapter-specific function; the core does not select a wire
-format.
+event envelope: identity, type, stream and aggregate identity, metadata,
+timestamp, stream version, correlation and causation identifiers, and global
+position. Violating this rule signals `event-sourcing-error`, because changing
+those fields would alter ordering or event identity during replay.
 
 `load-aggregate` accepts the same `:upcaster` policy and validates the event
 stream before reducing it. Pass `:use-snapshot NIL` when a caller needs a full
-replay even if the adapter supports snapshots. It returns the reconstructed
+replay even if the backend supports snapshots. It returns the reconstructed
 state and the last stream version, with `0` for an empty stream.
 
 ## Staging a command
@@ -58,5 +61,8 @@ An append failure leaves the staged events available for inspection or retry.
 
 The synchronous operations are the primary API. The optional CPS macros expose
 the same boundaries through success and error continuations for applications
-that use continuation-passing control flow. They do not introduce background
-work or change transaction semantics.
+that use continuation-passing control flow. The exported entry points are
+`event-store-append/cc`, `event-store-append-batch/cc`, `event-store-read/cc`,
+`replay-events/cc`, `commit-events/cc`, `rebuild-projection/cc`, and
+`advance-projection/cc`. They run synchronously and do not change transaction
+semantics.

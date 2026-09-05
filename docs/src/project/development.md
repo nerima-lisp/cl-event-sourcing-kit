@@ -82,6 +82,6 @@ link should fail the strict build.
 - Keep the core independent of storage and wire-format policy.
 - Preserve opaque application values at the boundary; do not add accidental
   deep-copy or serialization assumptions.
-- Add adapter guarantees to the adapter's documentation and tests.
+- Add backend guarantees to the backend's documentation and tests.
 - Run the narrowest meaningful check after a docs or code change, then report
   the command and its exit status.

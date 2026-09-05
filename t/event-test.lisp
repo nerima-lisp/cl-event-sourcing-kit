@@ -60,7 +60,7 @@
       (expect id-calls :to-be 1)
       (expect clock-calls :to-be 1))))
  (it
-  "allows explicit preassigned positions for adapter boundaries"
+  "allows explicit preassigned positions for store boundaries"
   (let ((event
          (make-test-event
           "event-1"

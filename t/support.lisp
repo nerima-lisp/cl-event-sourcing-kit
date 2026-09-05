@@ -42,10 +42,10 @@
     (when aggregate-id
       (list :aggregate-id aggregate-id)))))
 
-(defclass unsupported-store (event-store)
+(defclass unsupported-store ()
   ())
 
-(defclass protocol-store (event-store)
+(defclass protocol-store ()
   ())
 
 (defmethod event-store-append ((store protocol-store)

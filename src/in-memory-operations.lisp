@@ -58,8 +58,8 @@ runtime synchronization injectable without changing store semantics."
 
 Strings and cons trees are copied because callers can mutate those values
 after an append.  Non-string arrays are rejected because the reference
-adapter cannot make their contents a stable EQUAL hash key without choosing a
-serialization format.  Other values retain their normal EQUAL identity
+adapter cannot make their contents a stable EQUAL hash key without choosing
+a serialization format.  Other values retain their normal EQUAL identity
 semantics; the adapter does not inspect or serialize opaque identity objects.
 Circular cons trees are rejected rather than being used as hash keys."
   (cond
@@ -193,39 +193,90 @@ durability."
    :requested-event
    requested))
 
+(defun %classify-in-memory-append-events (store requested-events)
+  (let ((seen (make-hash-table :test #'equal))
+        (classifications nil)
+        (new-events nil))
+    ;; Classification happens while the store lock is held.  No store state is
+    ;; changed until every request item has passed this phase.
+    (dolist (requested requested-events)
+      (let ((event-id (domain-event-id requested))
+            (event-key (%in-memory-identity-key
+                        (domain-event-id requested))))
+        (multiple-value-bind (seen-event seen-p)
+            (gethash event-key seen)
+          (when seen-p
+            (error 'duplicate-event-id
+                   :event-id event-id
+                   :existing-event seen-event
+                   :requested-event requested))
+          (setf (gethash event-key seen) requested)
+          (multiple-value-bind (existing existing-p)
+              (gethash event-key (%in-memory-event-index store))
+            (if existing-p
+                (if (event-store-event-equivalent-p store existing requested)
+                    (push (list :duplicate existing) classifications)
+                    (%signal-duplicate-conflict event-id existing requested))
+                (progn
+                  (%ensure-new-event-has-no-position requested)
+                  (push (list :new requested) classifications)
+                  (push requested new-events)))))))
+    (values (nreverse classifications)
+            (nreverse new-events))))
+
+(defun %commit-in-memory-append-locked
+    (store canonical-stream-id actual-version classifications)
+  (let ((committed-new-events nil)
+        (canonical-events nil)
+        (next-version (1+ actual-version))
+        (next-global-position
+          (1+ (%in-memory-global-position store))))
+    (dolist (classification classifications)
+      (if (eq (first classification) :duplicate)
+          (push (second classification) canonical-events)
+          (let ((committed
+                  (%committed-copy (second classification)
+                                   next-version
+                                   next-global-position)))
+            (push committed canonical-events)
+            (push committed committed-new-events)
+            (incf next-version)
+            (incf next-global-position))))
+    (setf canonical-events (nreverse canonical-events)
+          committed-new-events (nreverse committed-new-events))
+    (let ((stream-events
+            (gethash canonical-stream-id (%in-memory-streams store))))
+      (dolist (committed committed-new-events)
+        (push committed stream-events))
+      (setf (gethash canonical-stream-id (%in-memory-streams store))
+            stream-events
+            (gethash canonical-stream-id (%in-memory-stream-versions store))
+            (+ actual-version (length committed-new-events))))
+    (dolist (committed committed-new-events)
+      (setf (gethash (%in-memory-identity-key (domain-event-id committed))
+                     (%in-memory-event-index store))
+            committed))
+    (let ((global-events (%in-memory-global-events store))
+          (global-ordered-events (%in-memory-global-ordered-events store)))
+      (dolist (committed committed-new-events)
+        (push committed global-events))
+      (dolist (committed committed-new-events)
+        (vector-push-extend
+         committed
+         global-ordered-events
+         (max 64 (array-total-size global-ordered-events))))
+      (setf (%in-memory-global-events store) global-events
+            (%in-memory-global-ordered-events store) global-ordered-events
+            (%in-memory-global-position store) (1- next-global-position)))
+    (values canonical-events
+            (+ actual-version (length committed-new-events)))))
+
 (defun %in-memory-append-locked (store stream-id requested-events expected-version)
   (let ((canonical-stream-id (%in-memory-identity-key stream-id)))
     (multiple-value-bind (actual-version exists-p)
         (%in-memory-current-version-by-key-locked store canonical-stream-id)
-      (let ((seen (make-hash-table :test #'equal))
-            (classifications nil)
-            (new-events nil))
-        ;; Classify the entire request while the lock is held.  No state is
-        ;; changed until this pass and the optimistic check complete.
-        (dolist (requested requested-events)
-          (let ((event-id (domain-event-id requested))
-                (event-key (%in-memory-identity-key
-                            (domain-event-id requested))))
-            (multiple-value-bind (seen-event seen-p)
-                (gethash event-key seen)
-              (when seen-p
-                (error 'duplicate-event-id
-                       :event-id event-id
-                       :existing-event seen-event
-                       :requested-event requested))
-              (setf (gethash event-key seen) requested)
-              (multiple-value-bind (existing existing-p)
-                  (gethash event-key (%in-memory-event-index store))
-                (if existing-p
-                    (if (event-store-event-equivalent-p store existing requested)
-                        (push (list :duplicate existing) classifications)
-                        (%signal-duplicate-conflict event-id existing requested))
-                    (progn
-                      (%ensure-new-event-has-no-position requested)
-                      (push (list :new requested) classifications)
-                      (push requested new-events)))))))
-        (setf classifications (nreverse classifications)
-              new-events (nreverse new-events))
+      (multiple-value-bind (classifications new-events)
+          (%classify-in-memory-append-events store requested-events)
         (when (or (null requested-events) new-events)
           (unless (%expected-version-matches-p expected-version
                                                  exists-p
@@ -238,56 +289,11 @@ durability."
                               (second classification))
                             classifications)
                     actual-version)
-            (let ((committed-new-events nil)
-                  (canonical-events nil)
-                  (next-version (1+ actual-version))
-                  (next-global-position
-                    (1+ (%in-memory-global-position store))))
-              (dolist (classification classifications)
-                (if (eq (first classification) :duplicate)
-                    (push (second classification) canonical-events)
-                    (let ((committed
-                            (%committed-copy (second classification)
-                                             next-version
-                                             next-global-position)))
-                      (push committed canonical-events)
-                      (push committed committed-new-events)
-                      (incf next-version)
-                      (incf next-global-position))))
-              (setf canonical-events (nreverse canonical-events)
-                    committed-new-events (nreverse committed-new-events))
-              (let ((stream-events
-                      (gethash canonical-stream-id
-                               (%in-memory-streams store))))
-                (dolist (committed committed-new-events)
-                  (push committed stream-events))
-                (setf (gethash canonical-stream-id (%in-memory-streams store))
-                      stream-events
-                      (gethash canonical-stream-id
-                               (%in-memory-stream-versions store))
-                      (+ actual-version (length committed-new-events))))
-              (dolist (committed committed-new-events)
-                (setf (gethash (%in-memory-identity-key
-                                (domain-event-id committed))
-                               (%in-memory-event-index store))
-                      committed))
-              (let ((global-events (%in-memory-global-events store))
-                    (global-ordered-events
-                      (%in-memory-global-ordered-events store)))
-                (dolist (committed committed-new-events)
-                  (push committed global-events))
-                (dolist (committed committed-new-events)
-                  (vector-push-extend
-                   committed
-                   global-ordered-events
-                   (max 64 (array-total-size global-ordered-events))))
-                (setf (%in-memory-global-events store) global-events
-                      (%in-memory-global-ordered-events store)
-                      global-ordered-events
-                      (%in-memory-global-position store)
-                      (1- next-global-position)))
-              (values canonical-events
-                      (+ actual-version (length committed-new-events)))))))))
+            (%commit-in-memory-append-locked
+             store
+             canonical-stream-id
+             actual-version
+             classifications))))))
 
 (defmethod event-store-append ((store in-memory-event-store) stream-id events
                                &key (expected-version *unspecified*))
@@ -311,227 +317,3 @@ validation succeeds."
          stream-id
          requested-events
          expected-version)))))
-
-(defun %validate-append-request (request)
-  (unless (event-append-request-p request)
-    (error
-     'type-error
-     :datum request
-     :expected-type 'event-append-request))
-  (let ((stream-id (event-append-request-stream-id request))
-        (expected-version (event-append-request-expected-version request)))
-    (%ensure-in-memory-stream-id stream-id)
-    (%validate-expected-version expected-version)
-    (let ((events (%coerce-event-list (event-append-request-events request))))
-      (dolist (event events)
-        (%validate-event-for-stream event stream-id))
-      (values stream-id events expected-version))))
-
-(defun %copy-hash-table (table)
-  (let ((copy (make-hash-table :test (hash-table-test table))))
-    (maphash (lambda (key value) (setf (gethash key copy) value)) table)
-    copy))
-
-(defmethod event-store-append-batch ((store in-memory-event-store) requests)
-  "Atomically append a list or vector of per-stream requests.
-
-Every request is validated before the first request is committed.  If a later
-request fails, the reference store restores all stream, id, and global-feed
-indexes to their state before the batch began."
-  (let ((validated nil))
-    (dolist (request (%coerce-event-list requests))
-      (multiple-value-bind (stream-id events expected-version)
-          (%validate-append-request request)
-        (push (list stream-id events expected-version) validated)))
-    (setf validated (nreverse validated))
-    (%with-in-memory-lock
-     (store)
-     (let ((streams (%copy-hash-table (%in-memory-streams store)))
-           (event-index (%copy-hash-table (%in-memory-event-index store)))
-           (stream-versions
-             (%copy-hash-table (%in-memory-stream-versions store)))
-           (global-events (%in-memory-global-events store))
-           (global-ordered-events
-             (%copy-in-memory-event-order
-              (%in-memory-global-ordered-events store)))
-           (global-position (%in-memory-global-position store))
-           (global-position-floor
-             (%in-memory-global-position-floor store)))
-       (handler-case
-           (mapcar
-            (lambda (request)
-              (destructuring-bind (stream-id events expected-version) request
-                (multiple-value-bind (committed version)
-                    (%in-memory-append-locked
-                     store
-                     stream-id
-                     events
-                     expected-version)
-                  (%make-event-append-result committed version))))
-            validated)
-         (error (condition)
-           (setf (%in-memory-streams store) streams
-                 (%in-memory-event-index store) event-index
-                 (%in-memory-stream-versions store) stream-versions
-                 (%in-memory-global-events store) global-events
-                 (%in-memory-global-ordered-events store)
-                 global-ordered-events
-                 (%in-memory-global-position store) global-position
-                 (%in-memory-global-position-floor store) global-position-floor)
-           (error condition)))))))
-
-(defun %validate-snapshot (snapshot)
-  (%validate-event-snapshot snapshot))
-
-(defun %snapshot-history-with (snapshot history)
-  (sort
-   (cons snapshot
-         (remove-if
-          (lambda (existing)
-            (= (event-snapshot-version existing)
-               (event-snapshot-version snapshot)))
-          (copy-list history)))
-   #'>
-   :key
-   #'event-snapshot-version))
-
-(defmethod event-store-save-snapshot ((store in-memory-event-store) snapshot)
-  "Save a snapshot and retain historical versions for bounded reads.
-
-Snapshots at version zero are allowed for an as-yet empty stream.  A snapshot
-cannot describe a future version.  Saving the same version replaces its
-previous snapshot."
-  (%validate-snapshot snapshot)
-  (let* ((stream-id (event-snapshot-stream-id snapshot))
-         (canonical-stream-id (%in-memory-identity-key stream-id))
-         (version (event-snapshot-version snapshot)))
-    (%with-in-memory-lock
-     (store)
-     (multiple-value-bind (actual-version exists-p)
-         (%in-memory-current-version-locked store canonical-stream-id)
-       (when (and (not exists-p) (> version 0))
-         (error
-          'invalid-snapshot
-          :stream-id stream-id
-          :version version
-          :reason :missing-stream))
-       (when (> version actual-version)
-         (error
-          'invalid-snapshot
-          :stream-id stream-id
-          :version version
-          :reason :future-version))
-       (let ((canonical-snapshot
-               (make-event-snapshot
-                :stream-id canonical-stream-id
-                :version version
-                :state (event-snapshot-state snapshot)
-                :metadata (event-snapshot-metadata snapshot)
-                :timestamp (event-snapshot-timestamp snapshot))))
-         (setf (gethash canonical-stream-id (%in-memory-snapshots store))
-               (%snapshot-history-with
-                canonical-snapshot
-                (gethash canonical-stream-id (%in-memory-snapshots store))))
-         canonical-snapshot)))))
-
-(defmethod event-store-read-snapshot ((store in-memory-event-store)
-                                      stream-id
-                                      &key
-                                      version)
-  "Read the latest snapshot whose version is not newer than VERSION."
-  (%ensure-in-memory-stream-id stream-id)
-  (%validate-read-bound version)
-  (%with-in-memory-lock
-   (store)
-   (find-if
-    (lambda (snapshot)
-      (or (null version)
-          (<= (event-snapshot-version snapshot) version)))
-    (gethash (%in-memory-identity-key stream-id)
-             (%in-memory-snapshots store)))))
-
-(defmethod event-store-delete-snapshot ((store in-memory-event-store) stream-id)
-  (%ensure-in-memory-stream-id stream-id)
-  (%with-in-memory-lock
-   (store)
-   (remhash (%in-memory-identity-key stream-id)
-            (%in-memory-snapshots store))))
-
-(defmethod event-store-snapshots-supported-p ((store in-memory-event-store))
-  (declare (ignore store))
-  t)
-
-(defmethod event-store-current-version ((store in-memory-event-store) stream-id)
-  (%ensure-in-memory-stream-id stream-id)
-  (%with-in-memory-lock
-   (store)
-   (nth-value 0 (%in-memory-current-version-locked store stream-id))))
-
-(defmethod event-store-current-global-position ((store in-memory-event-store))
-  (%with-in-memory-lock (store) (%in-memory-global-position store)))
-
-(defmethod event-store-stream-exists-p ((store in-memory-event-store) stream-id)
-  (%ensure-in-memory-stream-id stream-id)
-  (%with-in-memory-lock
-   (store)
-   (nth-value 1 (gethash (%in-memory-identity-key stream-id)
-                         (%in-memory-streams store)))))
-
-(defmethod event-store-global-position-supported-p ((store
-                                                     in-memory-event-store))
-  (declare (ignore store))
-  t)
-
-(defmethod event-store-prune ((store in-memory-event-store)
-                              &key
-                              (before-global-position *unspecified*))
-  "Remove global-feed entries before BEFORE-GLOBAL-POSITION.
-
-The stream history and snapshots remain available.  The floor is retained so
-that a consumer which resumes from an obsolete cursor receives a typed
-retention-gap condition instead of silently skipping events."
-  (let ((boundary
-          (if (eq before-global-position *unspecified*)
-              0
-            before-global-position)))
-    (%validate-read-bound boundary)
-    (%with-in-memory-lock
-     (store)
-     (let ((current-position (%in-memory-global-position store)))
-       (when (> boundary (1+ current-position))
-         (error
-          'type-error
-          :datum boundary
-          :expected-type '(integer 0 *)))
-       (setf (%in-memory-global-events store)
-             (remove-if
-              (lambda (event)
-                (< (domain-event-global-position event) boundary))
-              (%in-memory-global-events store)))
-       (setf (%in-memory-global-ordered-events store)
-             (%make-in-memory-event-order
-              (%in-memory-global-events store))
-             (%in-memory-global-position-floor store)
-             (max boundary (%in-memory-global-position-floor store)))
-       boundary))))
-
-(defmethod event-store-retention-supported-p ((store in-memory-event-store))
-  (declare (ignore store))
-  t)
-
-(defmethod event-store-retention-floor ((store in-memory-event-store))
-  (%with-in-memory-lock (store)
-    (%in-memory-global-position-floor store)))
-
-(defmethod event-store-capabilities ((store in-memory-event-store))
-  (declare (ignore store))
-  (copy-list
-   '(:append
-     :read
-     :read-all
-     :optimistic-concurrency
-     :idempotent-event-ids
-     :batch-append
-     :global-position
-     :snapshots
-     :retention)))

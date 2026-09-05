@@ -159,8 +159,6 @@
     (setf batch-size 100))
   (unless lease-seconds-supplied-p
     (setf lease-seconds 60))
-  (unless (typep event-store 'event-store)
-    (error 'type-error :datum event-store :expected-type 'event-store))
   (unless (subscription-offset-store-p offset-store)
     (error 'type-error
            :datum offset-store

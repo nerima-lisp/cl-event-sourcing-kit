@@ -34,7 +34,7 @@ Default collaborators are available through `*default-event-id-source*` and
 representation.
 
 This keeps tests deterministic and leaves identity policy with the
-application. A persistent adapter must still enforce the uniqueness and
+application. A persistent backend must still enforce the uniqueness and
 equivalence policy described in [Event store](event-store.md).
 
 ## Stream versions
@@ -46,7 +46,7 @@ are added by a successful append.
 
 ## Responsibility boundary
 
-The core guarantees protocol-level validation and result shapes. An adapter or
+The core guarantees protocol-level validation and result shapes. A backend or
 application owns:
 
 - transaction and locking behavior;
@@ -55,5 +55,5 @@ application owns:
 - replication, authorization, and retention;
 - scheduling and process supervision.
 
-An `event-store` subclass is therefore a protocol implementation, not a
-promise that the backing system is durable or distributed.
+A backend's `event-store` implementation is therefore a protocol implementation,
+not a promise that the backing system is durable or distributed.

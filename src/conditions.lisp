@@ -96,7 +96,7 @@
    (store :initarg :store :reader event-store-operation-store))
   (:default-initargs
    :message
-   "The event store operation is not supported by this adapter.")
+        "The event store operation is not supported by this store.")
   (:report
    (lambda (condition stream)
      (let ((*print-circle* t))
